@@ -99,7 +99,7 @@ class PhotoMetricDistortionMultiViewImage:
     second or second to last.
     1. random brightness
     2. random contrast (mode 0)
-    3. convert color from BGR to HSV
+    3. convert color from BGR to HSV    #what for?
     4. random saturation
     5. random hue
     6. convert color from HSV to BGR

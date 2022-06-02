@@ -209,7 +209,7 @@ class Detr3DHead(DETRHead):
         label_weights = gt_bboxes.new_ones(num_bboxes)
 
         # bbox targets
-        bbox_targets = torch.zeros_like(bbox_pred)[..., :9]
+        bbox_targets = torch.zeros_like(bbox_pred)[..., :self.code_size-1]#without class label
         bbox_weights = torch.zeros_like(bbox_pred)
         bbox_weights[pos_inds] = 1.0
 
@@ -331,7 +331,7 @@ class Detr3DHead(DETRHead):
         bbox_weights = bbox_weights * self.code_weights
 
         loss_bbox = self.loss_bbox(
-                bbox_preds[isnotnan, :10], normalized_bbox_targets[isnotnan, :10], bbox_weights[isnotnan, :10], avg_factor=num_total_pos)
+                bbox_preds[isnotnan, :self.code_size], normalized_bbox_targets[isnotnan, :self.code_size], bbox_weights[isnotnan, :self.code_size], avg_factor=num_total_pos)
 
         loss_cls = torch.nan_to_num(loss_cls)
         loss_bbox = torch.nan_to_num(loss_bbox)
@@ -438,7 +438,7 @@ class Detr3DHead(DETRHead):
             preds = preds_dicts[i]
             bboxes = preds['bboxes']
             bboxes[:, 2] = bboxes[:, 2] - bboxes[:, 5] * 0.5
-            bboxes = img_metas[i]['box_type_3d'](bboxes, 9)
+            bboxes = img_metas[i]['box_type_3d'](bboxes, self.code_size-1)
             scores = preds['scores']
             labels = preds['labels']
             ret_list.append([bboxes, scores, labels])

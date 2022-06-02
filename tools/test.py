@@ -179,7 +179,8 @@ def main():
     # set random seeds
     if args.seed is not None:
         set_random_seed(args.seed, deterministic=args.deterministic)
-
+    eval_kwargs_print = cfg.get('evaluation', {}).copy()
+    print("!!!after cfg processing: {}".format(eval_kwargs_print))
     # build the dataloader
     dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
@@ -188,7 +189,9 @@ def main():
         workers_per_gpu=cfg.data.workers_per_gpu,
         dist=distributed,
         shuffle=False)
-
+    
+    eval_kwargs_print = cfg.get('evaluation', {}).copy()
+    print("!!!after dataloader building: {}".format(eval_kwargs_print))
     # build the model and load checkpoint
     cfg.model.train_cfg = None
     model = build_model(cfg.model, test_cfg=cfg.get('test_cfg'))
@@ -211,9 +214,12 @@ def main():
         # segmentation dataset has `PALETTE` attribute
         model.PALETTE = dataset.PALETTE
 
+    eval_kwargs_print = cfg.get('evaluation', {}).copy()
+    print("!!!after model building: {}".format(eval_kwargs_print))
     if not distributed:
         model = MMDataParallel(model, device_ids=[0])
         outputs = single_gpu_test(model, data_loader, args.show, args.show_dir)
+        #list of dict of pts_bbox=dict(bboxes scores labels)
     else:
         model = MMDistributedDataParallel(
             model.cuda(),
@@ -221,7 +227,11 @@ def main():
             broadcast_buffers=False)
         outputs = multi_gpu_test(model, data_loader, args.tmpdir,
                                  args.gpu_collect)
-
+    # open('zlt_outputs_debug.txt','w').write(str(outputs))# must not contain image_metas, yes, but why labels all 0/1？？？
+    #没有骑车只有骑车和行人也正常...
+    # exit(0)
+    eval_kwargs_print = cfg.get('evaluation', {}).copy()
+    print("!!!after forward: {}".format(eval_kwargs_print))
     rank, _ = get_dist_info()
     if rank == 0:
         if args.out:
@@ -238,7 +248,7 @@ def main():
                     'rule'
             ]:
                 eval_kwargs.pop(key, None)
-            eval_kwargs.update(dict(metric=args.eval, **kwargs))
+            eval_kwargs.update(dict(metric=args.eval, **kwargs))# must be this one
             print(dataset.evaluate(outputs, **eval_kwargs))
 
 

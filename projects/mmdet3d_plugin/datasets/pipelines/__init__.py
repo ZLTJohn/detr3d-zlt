@@ -3,9 +3,14 @@ from .transform_3d import (
     PhotoMetricDistortionMultiViewImage, CropMultiViewImage,
     RandomScaleImageMultiViewImage,
     HorizontalRandomFlipMultiViewImage)
-
+from .transfusion_loading import (
+    MyNormalize, MyLoadAnnotations3D, MyLoadMultiViewImageFromFiles,
+    MyPad, MyResize
+)
 __all__ = [
     'PadMultiViewImage', 'NormalizeMultiviewImage', 
     'PhotoMetricDistortionMultiViewImage', 'CropMultiViewImage',
-    'RandomScaleImageMultiViewImage', 'HorizontalRandomFlipMultiViewImage'
+    'RandomScaleImageMultiViewImage', 'HorizontalRandomFlipMultiViewImage',
+    'MyNormalize', 'MyLoadAnnotations3D', 'MyLoadMultiViewImageFromFiles',
+    'MyPad', 'MyResize'
 ]

@@ -1,5 +1,5 @@
 import numpy as np
-from mmdet.datasets import DATASETS
+from mmdet3d.datasets import DATASETS
 from mmdet3d.datasets import NuScenesDataset
 
 

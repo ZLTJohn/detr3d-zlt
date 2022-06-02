@@ -174,9 +174,9 @@ class Detr3D(MVXTwoStageDetector):
             outs, img_metas, rescale=rescale)
         bbox_results = [
             bbox3d2result(bboxes, scores, labels)
-            for bboxes, scores, labels in bbox_list
+            for bboxes, scores, labels in bbox_list     #for each in batch
         ]
-        return bbox_results
+        return bbox_results #list of dict(bboxes scores labels) in one frame
     
     def simple_test(self, img_metas, img=None, rescale=False):
         """Test function without augmentaiton."""
@@ -187,7 +187,7 @@ class Detr3D(MVXTwoStageDetector):
             img_feats, img_metas, rescale=rescale)
         for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
             result_dict['pts_bbox'] = pts_bbox
-        return bbox_list
+        return bbox_list    #list of dict of pts_bbox=dict(bboxes scores labels)
 
     def aug_test_pts(self, feats, img_metas, rescale=False):
         feats_list = []
