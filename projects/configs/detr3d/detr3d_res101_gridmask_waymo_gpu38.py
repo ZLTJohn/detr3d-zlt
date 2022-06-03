@@ -7,8 +7,9 @@ plugin_dir='projects/mmdet3d_plugin/'
 
 dataset_type = 'CustomWaymoDataset'
 # data_root = 'data/waymo/kitti_format/'
-data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
+# data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
+data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/' 
 
 file_client_args = dict(backend='disk')
@@ -227,6 +228,6 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
 total_epochs = 24
-evaluation = dict(_delete_=True, interval=12)
+evaluation = dict(_delete_=True, interval=24)
 
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)

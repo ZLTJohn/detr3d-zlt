@@ -330,11 +330,11 @@ class CustomWaymoDataset(KittiDataset):
 
             import subprocess
             import shutil
-            shutil.copy(f'{pklfile_prefix}.bin', '/home/zhenglt/detr3d/work_dirs/result.bin')
+            shutil.copy(f'{pklfile_prefix}.bin', 'work_dirs/result.bin')
             ret_bytes = subprocess.check_output(        
                 'mmdetection3d/mmdet3d/core/evaluation/waymo_utils/' +
                 f'compute_detection_metrics_main {pklfile_prefix}.bin ' +
-                f'{waymo_root}/val_gt.bin',
+                f'{waymo_root}/gt.bin',
                 shell=True)
             ret_texts = ret_bytes.decode('utf-8')
             print(ret_texts)

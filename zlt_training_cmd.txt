@@ -4,6 +4,7 @@ bash tools/dist_test.sh projects/configs/detr3d/detr3d_res101_gridmask_waymo.py 
 tensorboard --logdir=tf_logs --bind_all
 
 zhenglt@GPU37:~/detr3d$ bash tools/dist_test.sh projects/configs/detr3d/detr3d_res101_gridmask_waymo_gpu37.py work_dirs/detr3d_res101_gridmask_waymo_gpu37/epoch_2.pth 1 --eval=waymo
+bash tools/dist_test.sh configs/pointpillars/hv_pointpillars_secfpn_sbn_2x16_2x_waymoD5-3d-car.py ckpts/hv_pointpillars_secfpn_sbn_2x16_2x_waymoD5-3d-car_20200901_204315-302fc3e7.pth 3 --eval=waymo
 
 nuscene:
 bash tools/dist_train.sh projects/configs/detr3d/detr3d_res101_gridmask.py 8
