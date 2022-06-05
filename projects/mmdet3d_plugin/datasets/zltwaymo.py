@@ -216,8 +216,7 @@ class CustomWaymoDataset(KittiDataset):
         # open('zlt_output_kitti_format_debug.txt','w').write(str(result_files))  #we got absolutely right data
         # exit(0)  
         if 'waymo' in data_format:
-            from mmdet3d.core.evaluation.waymo_utils.prediction_kitti_to_waymo import \
-                KITTI2Waymo  # noqa
+            from .zlt_kitti2waymo import zlt_KITTI2Waymo as KITTI2Waymo
             waymo_root = osp.join(
                 self.data_root.split('kitti_format')[0], 'waymo_format')
             if self.split == 'training':
@@ -236,11 +235,11 @@ class CustomWaymoDataset(KittiDataset):
                 converter = KITTI2Waymo(result_files['pts_bbox'],
                                         waymo_tfrecords_dir,
                                         waymo_results_save_dir,
-                                        waymo_results_final_path, prefix, workers=4)
+                                        waymo_results_final_path, prefix)
             else:
                 converter = KITTI2Waymo(result_files, waymo_tfrecords_dir,
                                         waymo_results_save_dir,
-                                        waymo_results_final_path, prefix, workers=4)# worker弄小一点看看行不行
+                                        waymo_results_final_path, prefix)# worker弄小一点看看行不行
             print("still work before converter convert!!!")
             print(waymo_tfrecords_dir, waymo_results_save_dir, waymo_results_final_path)
             # exit(0)
@@ -330,7 +329,9 @@ class CustomWaymoDataset(KittiDataset):
 
             import subprocess
             import shutil
+            from time import time
             shutil.copy(f'{pklfile_prefix}.bin', 'work_dirs/result.bin')
+            _ = time()
             ret_bytes = subprocess.check_output(        
                 'mmdetection3d/mmdet3d/core/evaluation/waymo_utils/' +
                 f'compute_detection_metrics_main {pklfile_prefix}.bin ' +
@@ -340,6 +341,7 @@ class CustomWaymoDataset(KittiDataset):
             print(ret_texts)
             print("OK after ret_bytes!!!")
             print_log(ret_texts)
+            print('time usage of compute_detection_metrics_main: {} s'.format(time()-_))
             # parse the text to get ap_dict
             ap_dict = {
                 'Vehicle/L1 mAP': 0,

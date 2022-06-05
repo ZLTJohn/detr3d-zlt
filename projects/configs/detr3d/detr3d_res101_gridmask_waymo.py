@@ -6,13 +6,13 @@ plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 
 dataset_type = 'CustomWaymoDataset'
-# data_root = 'data/waymo/kitti_format/'
-data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
+data_root = 'data/waymo_v131/kitti_format/'
+# data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
-# data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/' 
+# data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
-# resume_from = '/home/zhenglt/pure-detr3d/work_dirs/detr3d_res101_gridmask_waymo/epoch_11.pth'
+# resume_from = '/home/zhenglt/detr3d/work_dirs/detr3d_res101_gridmask_waymo/epoch_23.pth'
 # load_from='ckpts/fcos3d.pth'
 class_names = [ # 不确定sign类别是否叫sign
     'Car', 'Pedestrian', 'Cyclist'
@@ -44,7 +44,10 @@ model = dict(
         norm_eval=True,
         style='caffe',
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
-        stage_with_dcn=(False, False, True, True)),
+        stage_with_dcn=(False, False, True, True),
+        init_cfg=dict(
+            type='Pretrained',
+            checkpoint='open-mmlab://detectron2/resnet101_caffe')),
     img_neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -56,7 +59,7 @@ model = dict(
     pts_bbox_head=dict(
         type='Detr3DHead',
         num_query=900,
-        num_classes=4,
+        num_classes=3,
         in_channels=256,
         code_size=8,    #we don't infer velocity here, but infer(x,y,z,w,h,l,sin(θ),cos(θ)) for bboxes
         code_weights = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], #specify the weights since default length is 10
@@ -99,7 +102,7 @@ model = dict(
             pc_range=point_cloud_range,
             max_num=300,
             voxel_size=voxel_size,
-            num_classes=4), 
+            num_classes=3), 
         positional_encoding=dict(
             type='SinePositionalEncoding',
             num_feats=128,
@@ -191,9 +194,7 @@ data = dict(
         test_mode=True,
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
-        box_type_3d='LiDAR',
-        # load one frame every five frames
-        load_interval=10),
+        box_type_3d='LiDAR'),
     test=dict(
         type=dataset_type,
         data_root=data_root,
@@ -206,9 +207,7 @@ data = dict(
         test_mode=True,
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
-        box_type_3d='LiDAR',
-        # load one frame every five frames
-        load_interval=10))
+        box_type_3d='LiDAR'))
 
 optimizer = dict(
     type='AdamW', 
@@ -227,6 +226,6 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
 total_epochs = 24
-evaluation = dict(_delete_=True, interval=12)
+evaluation = dict(_delete_=True, interval=2)
 
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
