@@ -6,7 +6,7 @@ plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 
 dataset_type = 'CustomWaymoDataset'
-data_root = 'data/waymo_subset_v131/kitti_format/'
+data_root = 'data/waymo_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
@@ -194,9 +194,8 @@ data = dict(
         test_mode=True,
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
-        box_type_3d='LiDAR',
-        # load one frame every five frames
-        load_interval=10),
+        box_type_3d='LiDAR'),
+        # load one frame every five frames does NOT make sense here
     test=dict(
         type=dataset_type,
         data_root=data_root,
@@ -209,9 +208,7 @@ data = dict(
         test_mode=True,
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
-        box_type_3d='LiDAR',
-        # load one frame every five frames
-        load_interval=10))
+        box_type_3d='LiDAR'))
 
 optimizer = dict(
     type='AdamW', 
@@ -230,6 +227,6 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
 total_epochs = 24
-evaluation = dict(_delete_=True, interval=2)
+evaluation = dict(_delete_=True, interval=1)
 
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
