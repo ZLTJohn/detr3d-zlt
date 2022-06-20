@@ -49,7 +49,7 @@ class Detr3DHead(DETRHead):
         
         self.bbox_coder = build_bbox_coder(bbox_coder)
         self.pc_range = self.bbox_coder.pc_range
-        self.num_cls_fcs = num_cls_fcs - 1
+        self.num_cls_fcs = num_cls_fcs - 1  #？？？这不就没用了么...
         super(Detr3DHead, self).__init__(
             *args, transformer=transformer, **kwargs)
         self.code_weights = nn.Parameter(torch.tensor(
@@ -85,7 +85,7 @@ class Detr3DHead(DETRHead):
             self.reg_branches = _get_clones(reg_branch, num_pred)
         else:
             self.cls_branches = nn.ModuleList(
-                [fc_cls for _ in range(num_pred)])
+                [fc_cls for _ in range(num_pred)])      #so shared weights？
             self.reg_branches = nn.ModuleList(
                 [reg_branch for _ in range(num_pred)])
 
@@ -114,7 +114,7 @@ class Detr3DHead(DETRHead):
             all_bbox_preds (Tensor): Sigmoid outputs from the regression \
                 head with normalized coordinate format (cx, cy, w, l, cz, h, theta, vx, vy). \
                 Shape [nb_dec, bs, num_query, 9].
-        """
+        """         ###为什么是theta，不是costheta sintheta么？？
 
         query_embeds = self.query_embedding.weight
         
@@ -124,7 +124,7 @@ class Detr3DHead(DETRHead):
             reg_branches=self.reg_branches if self.with_box_refine else None,  # noqa:E501
             img_metas=img_metas,
         )
-        hs = hs.permute(0, 2, 1, 3)
+        hs = hs.permute(0, 2, 1, 3)#what is this
         outputs_classes = []
         outputs_coords = []
 
@@ -134,9 +134,9 @@ class Detr3DHead(DETRHead):
             else:
                 reference = inter_references[lvl - 1]
             reference = inverse_sigmoid(reference)
-            outputs_class = self.cls_branches[lvl](hs[lvl])
+            outputs_class = self.cls_branches[lvl](hs[lvl])     #multiple forward？ 这里主要还是把format同步成target的样子
             tmp = self.reg_branches[lvl](hs[lvl])
-
+            # print('tmp shape: {}'.format(tmp.shape))  # tmp shape: torch.Size([1, 900, 8])
             # TODO: check the shape of reference
             assert reference.shape[-1] == 3
             tmp[..., 0:2] += reference[..., 0:2]
@@ -163,10 +163,10 @@ class Detr3DHead(DETRHead):
         return outs
 
     def _get_target_single(self,
-                           cls_score,
-                           bbox_pred,
-                           gt_labels,
-                           gt_bboxes,
+                           cls_score,   #[query, 1]
+                           bbox_pred,   #[query, 8]
+                           gt_labels,   #[num_gt, 1]
+                           gt_bboxes,   #[num_gt, 7]
                            gt_bboxes_ignore=None):
         """"Compute regression and classification targets for one image.
         Outputs from a single decoder layer of a single feature level are used.
@@ -193,7 +193,7 @@ class Detr3DHead(DETRHead):
         """
 
         num_bboxes = bbox_pred.size(0)
-        # assigner and sampler
+        # assigner and sampler,PseudoSampler
         assign_result = self.assigner.assign(bbox_pred, cls_score, gt_bboxes,
                                              gt_labels, gt_bboxes_ignore)
         sampling_result = self.sampler.sample(assign_result, bbox_pred,
@@ -206,12 +206,12 @@ class Detr3DHead(DETRHead):
                                     self.num_classes,
                                     dtype=torch.long)
         labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
-        label_weights = gt_bboxes.new_ones(num_bboxes)
+        label_weights = gt_bboxes.new_ones(num_bboxes)  #all query should learn its classification
 
         # bbox targets
-        bbox_targets = torch.zeros_like(bbox_pred)[..., :self.code_size-1]#without class label
+        bbox_targets = torch.zeros_like(bbox_pred)[..., :self.code_size-1]#theta in gt_bbox here is still a single scalar
         bbox_weights = torch.zeros_like(bbox_pred)
-        bbox_weights[pos_inds] = 1.0
+        bbox_weights[pos_inds] = 1.0        #only matched query will learn from bbox coord
 
         # DETR
         bbox_targets[pos_inds] = sampling_result.pos_gt_bboxes
@@ -255,13 +255,13 @@ class Detr3DHead(DETRHead):
         """
         assert gt_bboxes_ignore_list is None, \
             'Only supports for gt_bboxes_ignore setting to None.'
-        num_imgs = len(cls_scores_list)
+        num_imgs = len(cls_scores_list) #bs
         gt_bboxes_ignore_list = [
             gt_bboxes_ignore_list for _ in range(num_imgs)
         ]
 
         (labels_list, label_weights_list, bbox_targets_list,
-         bbox_weights_list, pos_inds_list, neg_inds_list) = multi_apply(
+         bbox_weights_list, pos_inds_list, neg_inds_list) = multi_apply(        #get targets each frame in batch, here bs = 1
              self._get_target_single, cls_scores_list, bbox_preds_list,
              gt_labels_list, gt_bboxes_list, gt_bboxes_ignore_list)
         num_total_pos = sum((inds.numel() for inds in pos_inds_list))
@@ -293,14 +293,24 @@ class Detr3DHead(DETRHead):
             dict[str, Tensor]: A dictionary of loss components for outputs from
                 a single decoder layer.
         """
-        num_imgs = cls_scores.size(0)
+        num_imgs = cls_scores.size(0)#batch size
         cls_scores_list = [cls_scores[i] for i in range(num_imgs)]
-        bbox_preds_list = [bbox_preds[i] for i in range(num_imgs)]
+        bbox_preds_list = [bbox_preds[i] for i in range(num_imgs)]#tensor to list of tensor
+        # print(cls_scores.size())
+        # print(bbox_preds.size())
+        # print(cls_scores_list)
+        # print(bbox_preds_list)
+        # print(gt_labels_list)
+        # print(gt_bboxes_list)
+        # print(gt_bboxes_ignore_list)
+        # open('debug_target/nuscene_gt_bboxes_list.txt','w').write(str(gt_bboxes_list))
+        # open('debug_target/nuscene_gt_labels_list.txt','w').write(str(gt_labels_list))
+        # exit(0)
         cls_reg_targets = self.get_targets(cls_scores_list, bbox_preds_list,
                                            gt_bboxes_list, gt_labels_list, 
                                            gt_bboxes_ignore_list)
         (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
-         num_total_pos, num_total_neg) = cls_reg_targets
+         num_total_pos, num_total_neg) = cls_reg_targets    #here we get [bs, query, code_size-1]
         labels = torch.cat(labels_list, 0)
         label_weights = torch.cat(label_weights_list, 0)
         bbox_targets = torch.cat(bbox_targets_list, 0)
@@ -311,14 +321,18 @@ class Detr3DHead(DETRHead):
         # construct weighted avg_factor to match with the official DETR repo
         cls_avg_factor = num_total_pos * 1.0 + \
             num_total_neg * self.bg_cls_weight
+        # print(self.bg_cls_weight)# 0
+        # print(cls_avg_factor)# 9
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
                 cls_scores.new_tensor([cls_avg_factor]))
 
         cls_avg_factor = max(cls_avg_factor, 1)
+        # print('cls score:{}'.format(cls_scores))
+        # print('labels:{}'.format(labels))
         loss_cls = self.loss_cls(
             cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
-
+        # weights is query-wise 用于为每个query的loss加权，加权后统计loss和，然后用avg_factor除一下。
         # Compute the average number of gt boxes accross all gpus, for
         # normalization purposes
         num_total_pos = loss_cls.new_tensor([num_total_pos])
@@ -327,22 +341,42 @@ class Detr3DHead(DETRHead):
         # regression L1 loss
         bbox_preds = bbox_preds.reshape(-1, bbox_preds.size(-1))
         normalized_bbox_targets = normalize_bbox(bbox_targets, self.pc_range)
-        isnotnan = torch.isfinite(normalized_bbox_targets).all(dim=-1)
+        isnotnan = torch.isfinite(normalized_bbox_targets).all(dim=-1)      #neg_query is all 0, log(0) is NaN
         bbox_weights = bbox_weights * self.code_weights
 
+        # open('debug_target/nuscene_bbox_preds.txt','w').write(str(bbox_preds))
+        # with open('debug_target/nuscene_normalized_bbox_targets.txt','w') as f:
+        #     for i in range(len(normalized_bbox_targets)):
+        #         if isnotnan[i]:
+        #             f.write('query {} got target:\n'.format(i))
+        #             f.write('bbox preds & gtbox target:\n{}\n{}\n'.format(bbox_preds[i], normalized_bbox_targets[i]))
+        #             f.write('cls score & labels:\n{}\n{}\n'.format(cls_scores[i], labels[i]))
+        # if (any(isnotnan) == 1):
+        #     exit(0)
         loss_bbox = self.loss_bbox(
                 bbox_preds[isnotnan, :self.code_size], normalized_bbox_targets[isnotnan, :self.code_size], bbox_weights[isnotnan, :self.code_size], avg_factor=num_total_pos)
 
         loss_cls = torch.nan_to_num(loss_cls)
         loss_bbox = torch.nan_to_num(loss_bbox)
+        # print(cls_scores.sigmoid()[isnotnan,:][:5])
+        # print(labels[isnotnan][:5])
+        # print(bbox_preds[isnotnan, :self.code_size][:5])
+        # print(normalized_bbox_targets[isnotnan, :self.code_size][:5])
+        # print('loss cls:{}\nloss reg:{}'.format(loss_cls, loss_bbox))
+        # print(bbox_weights[isnotnan, :self.code_size])
+        # exit(0)
         return loss_cls, loss_bbox
-    
+
     @force_fp32(apply_to=('preds_dicts'))
     def loss(self,
              gt_bboxes_list,
              gt_labels_list,
              preds_dicts,
              gt_bboxes_ignore=None):
+        # open('debug_target/nuscene_gtbox_list.txt','w').write(str(gt_bboxes_list))
+        # open('debug_target/nuscene_gt_labels_list.txt','w').write(str(gt_labels_list))
+        # open('debug_target/nuscene_preds_dicts.txt','w').write(str(preds_dicts))
+        # exit(0)
         """"Loss function.
         Args:
             
@@ -381,6 +415,12 @@ class Detr3DHead(DETRHead):
 
         num_dec_layers = len(all_cls_scores)
         device = gt_labels_list[0].device
+        # print(num_dec_layers)  # 6
+        # print(gt_labels_list[0])  # shape [num_box,1]
+        # print(gt_bboxes_list[0].gravity_center)   # bottom center +z_size//2
+        # print(gt_bboxes_list[0].tensor)   #[num_box, 7],each row is[ bottom center(x,y,z) + x_size y_size z_size yaw ]
+        # then we broadcast it to every decoder layer
+        # print('gt list len: {}'.format(len(gt_bboxes_list)))
         gt_bboxes_list = [torch.cat(
             (gt_bboxes.gravity_center, gt_bboxes.tensor[:, 3:]),
             dim=1).to(device) for gt_bboxes in gt_bboxes_list]
@@ -391,7 +431,7 @@ class Detr3DHead(DETRHead):
             gt_bboxes_ignore for _ in range(num_dec_layers)
         ]
 
-        losses_cls, losses_bbox = multi_apply(
+        losses_cls, losses_bbox = multi_apply(          #calculate loss for each decoder layer
             self.loss_single, all_cls_scores, all_bbox_preds,
             all_gt_bboxes_list, all_gt_labels_list, 
             all_gt_bboxes_ignore_list)
@@ -408,6 +448,7 @@ class Detr3DHead(DETRHead):
                                  gt_bboxes_list, binary_labels_list, gt_bboxes_ignore)
             loss_dict['enc_loss_cls'] = enc_loss_cls
             loss_dict['enc_loss_bbox'] = enc_losses_bbox
+            print('detr3d now is two stage')
 
         # loss from the last decoder layer
         loss_dict['loss_cls'] = losses_cls[-1]
@@ -420,6 +461,8 @@ class Detr3DHead(DETRHead):
             loss_dict[f'd{num_dec_layer}.loss_cls'] = loss_cls_i
             loss_dict[f'd{num_dec_layer}.loss_bbox'] = loss_bbox_i
             num_dec_layer += 1
+        # print(loss_dict)
+        # exit(0)
         return loss_dict
 
     @force_fp32(apply_to=('preds_dicts'))
@@ -431,8 +474,8 @@ class Detr3DHead(DETRHead):
         Returns:
             list[dict]: Decoded bbox, scores and labels after nms.
         """
-        preds_dicts = self.bbox_coder.decode(preds_dicts)
-        num_samples = len(preds_dicts)
+        preds_dicts = self.bbox_coder.decode(preds_dicts)   #sin theta & cosine theta ---> theta
+        num_samples = len(preds_dicts)  #batch size 
         ret_list = []
         for i in range(num_samples):
             preds = preds_dicts[i]

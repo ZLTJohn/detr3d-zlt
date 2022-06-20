@@ -10,7 +10,8 @@ plugin_dir='projects/mmdet3d_plugin/'
 # cloud range accordingly
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_size = [0.2, 0.2, 8]
-
+resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/detr3d_res101_gridmask/epoch_1.pth'
+# load_from = '/home/zhengliangtao/pure-detr3d/ckpts/detr3d_resnet101.pth'
 img_norm_cfg = dict(
     mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
 # For nuScenes we usually do 10-class detection
@@ -222,4 +223,4 @@ total_epochs = 24
 evaluation = dict(interval=2, pipeline=test_pipeline)
 
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
-load_from='ckpts/fcos3d.pth'
+# load_from='ckpts/fcos3d.pth'

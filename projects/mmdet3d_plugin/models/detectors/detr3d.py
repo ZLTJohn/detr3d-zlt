@@ -40,7 +40,7 @@ class Detr3D(MVXTwoStageDetector):
         """Extract features of images."""
         B = img.size(0)
         if img is not None:
-            input_shape = img.shape[-2:]
+            input_shape = img.shape[-2:]#bs nchw
             # update real input shape of each single img
             for img_meta in img_metas:
                 img_meta.update(input_shape=input_shape)
@@ -51,7 +51,7 @@ class Detr3D(MVXTwoStageDetector):
                 B, N, C, H, W = img.size()
                 img = img.view(B * N, C, H, W)
             if self.use_grid_mask:
-                img = self.grid_mask(img)
+                img = self.grid_mask(img)       # mask out some grids
             img_feats = self.img_backbone(img)
             if isinstance(img_feats, dict):
                 img_feats = list(img_feats.values())
@@ -91,8 +91,18 @@ class Detr3D(MVXTwoStageDetector):
             dict: Losses of each branch.
         """
         outs = self.pts_bbox_head(pts_feats, img_metas)
+        # bbox_list = self.pts_bbox_head.get_bboxes(
+        #     outs, img_metas, rescale=False)
+        # import cv2
+        # for i,name in enumerate(img_metas[0]['filename']):
+        #     img = cv2.imread(name)
+        #     cv2.imwrite('debug_target/gt_vis_{}.png'.format(i),img)
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
         losses = self.pts_bbox_head.loss(*loss_inputs)
+        # print(bbox_list)
+        # print(bbox_list[0][2].size())#300
+        # print(losses)
+        # exit(0)
         return losses
 
     @force_fp32(apply_to=('img', 'points'))
@@ -113,12 +123,12 @@ class Detr3D(MVXTwoStageDetector):
 
     def forward_train(self,
                       points=None,
-                      img_metas=None,
-                      gt_bboxes_3d=None,
-                      gt_labels_3d=None,
+                      img_metas=None,##
+                      gt_bboxes_3d=None,##
+                      gt_labels_3d=None,##
                       gt_labels=None,
                       gt_bboxes=None,
-                      img=None,
+                      img=None,##
                       proposals=None,
                       gt_bboxes_ignore=None,
                       img_depth=None,
@@ -146,6 +156,18 @@ class Detr3D(MVXTwoStageDetector):
         Returns:
             dict: Losses of different branches.
         """
+        # # open('debug_forward/waymo_train_img_metas.txt','w').write(str(img_metas)+'\ninput img shape:'+str(img.shape))
+        # # exit(0)
+        # import cv2
+        # print(img)
+        # ds_name = 'waymo' if len(img_metas[0]['filename'])==5 else 'nuscene'
+        # for i,name in enumerate(img_metas[0]['filename']):
+        #     img_out = img[0][i].permute(1,2,0).detach().cpu().numpy()
+        #     img_in = cv2.imread(name)
+        #     print(img_in)
+        #     print(img_out.shape)
+        #     cv2.imwrite('debug_forward/{}_input_vis_finalcheck_{}.png'.format(ds_name, i),img_out)
+        # exit(0)
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
         losses = dict()
         losses_pts = self.forward_pts_train(img_feats, gt_bboxes_3d,
@@ -155,6 +177,8 @@ class Detr3D(MVXTwoStageDetector):
         return losses
     
     def forward_test(self, img_metas, img=None, **kwargs):
+        # open('debug_forward/waymo_test_img_metas.txt','w').write(str(img_metas)+'\ninput img shape:'+str(img[0].shape)+'\nlen of img list'+str(len(img)))
+        # exit(0)
         for var, name in [(img_metas, 'img_metas')]:
             if not isinstance(var, list):
                 raise TypeError('{} must be a list, but got {}'.format(
@@ -172,8 +196,11 @@ class Detr3D(MVXTwoStageDetector):
         outs = self.pts_bbox_head(x, img_metas)
         bbox_list = self.pts_bbox_head.get_bboxes(
             outs, img_metas, rescale=rescale)
+        # print(bbox_list)
+        # print(bbox_list[0][2].size())#300
+        # exit(0)
         bbox_results = [
-            bbox3d2result(bboxes, scores, labels)
+            bbox3d2result(bboxes, scores, labels)       # to CPU
             for bboxes, scores, labels in bbox_list     #for each in batch
         ]
         return bbox_results #list of dict(bboxes scores labels) in one frame
@@ -187,7 +214,7 @@ class Detr3D(MVXTwoStageDetector):
             img_feats, img_metas, rescale=rescale)
         for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
             result_dict['pts_bbox'] = pts_bbox
-        return bbox_list    #list of dict of pts_bbox=dict(bboxes scores labels)
+        return bbox_list    #list of dict of pts_bbox=dict(bboxes scores labels), len()=batch size
 
     def aug_test_pts(self, feats, img_metas, rescale=False):
         feats_list = []

@@ -81,7 +81,8 @@ class Detr3DTransformer(BaseModule):
         Args:
             mlvl_feats (list(Tensor)): Input queries from
                 different level. Each element has shape
-                [bs, embed_dims, h, w].
+                xxxxxx[bs, embed_dims, h, w].xxxxxxxxx
+                (B, N, C, H, W).
             query_embed (Tensor): The query embedding for decoder,
                 with shape [num_query, c].
             mlvl_pos_embeds (list(Tensor)): The positional encoding
@@ -115,12 +116,12 @@ class Detr3DTransformer(BaseModule):
                     otherwise None.
         """
         assert query_embed is not None
-        bs = mlvl_feats[0].size(0)
-        query_pos, query = torch.split(query_embed, self.embed_dims , dim=1)
-        query_pos = query_pos.unsqueeze(0).expand(bs, -1, -1)
-        query = query.unsqueeze(0).expand(bs, -1, -1)
-        reference_points = self.reference_points(query_pos)
-        reference_points = reference_points.sigmoid()
+        bs = mlvl_feats[0].size(0)      #(B, N, C, H, W).
+        query_pos, query = torch.split(query_embed, self.embed_dims , dim=1)#所以positional encoding和query embedding是一样长的 ##[num_query, 2c]
+        query_pos = query_pos.unsqueeze(0).expand(bs, -1, -1)#  复制扩充成[batch_size,num_query,c]
+        query = query.unsqueeze(0).expand(bs, -1, -1)           #同理
+        reference_points = self.reference_points(query_pos)     #从positional encoding 里推出ref point
+        reference_points = reference_points.sigmoid()           #归一化
         init_reference_out = reference_points
 
         # decoder
@@ -165,7 +166,7 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
             reference_points (Tensor): The reference
                 points of offset. has shape
                 (bs, num_query, 4) when as_two_stage,
-                otherwise has shape ((bs, num_query, 2).
+                otherwise has shape self.reference_points = nn.Linear(self.embed_dims, 3)
             reg_branch: (obj:`nn.ModuleList`): Used for
                 refining the regression results. Only would
                 be passed when with_box_refine is True,
@@ -197,11 +198,12 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
                     ..., :2] + inverse_sigmoid(reference_points[..., :2])
                 new_reference_points[..., 2:3] = tmp[
                     ..., 4:5] + inverse_sigmoid(reference_points[..., 2:3])
-                
+                ### reg branch能不断refine ref point，ref point即为box center
                 new_reference_points = new_reference_points.sigmoid()
 
-                reference_points = new_reference_points.detach()
-
+                reference_points = new_reference_points.detach()    #ref point之间不参与back prop，是不是每层有自己的loss？
+            # pts = load_pts(kwargs['img_metas'])
+            # save_bev(pts, new_reference_points,'debug_refpoint_bev', kwargs['img_metas'][0]['pts_filename'].split('/')[-1]+'_layer{}'.format(lid))
             output = output.permute(1, 0, 2)
             if self.return_intermediate:
                 intermediate.append(output)
@@ -371,7 +373,7 @@ class Detr3DCrossAtten(BaseModule):
         output = output.sum(-1).sum(-1).sum(-1)
         output = output.permute(2, 0, 1)
         
-        output = self.output_proj(output)
+        output = self.output_proj(output)#还调整么。。。后面有ffn按理说应该够用了吧？
         # (num_query, bs, embed_dims)
         pos_feat = self.position_encoder(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
 
@@ -389,24 +391,37 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
     reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
     reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
-    # reference_points (B, num_queries, 4)
+    # reference_points (B, num_queries, 4) ，to homogeneous coordinate
     reference_points = torch.cat((reference_points, torch.ones_like(reference_points[..., :1])), -1)
     B, num_query = reference_points.size()[:2]
     num_cam = lidar2img.size(1)
-    reference_points = reference_points.view(B, 1, num_query, 4).repeat(1, num_cam, 1, 1).unsqueeze(-1)
-    lidar2img = lidar2img.view(B, num_cam, 1, 4, 4).repeat(1, 1, num_query, 1, 1)
-    reference_points_cam = torch.matmul(lidar2img, reference_points).squeeze(-1)
+    reference_points = reference_points.view(B, 1, num_query, 4).repeat(1, num_cam, 1, 1).unsqueeze(-1)##B num_c num_q 4 ,1
+    lidar2img = lidar2img.view(B, num_cam, 1, 4, 4).repeat(1, 1, num_query, 1, 1)   # B num_c num_q 4 4
+    reference_points_cam = torch.matmul(lidar2img, reference_points).squeeze(-1)    # B num_c num_q 4
     eps = 1e-5
-    mask = (reference_points_cam[..., 2:3] > eps)
-    reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(
-        reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)
-    reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
-    reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
-    reference_points_cam = (reference_points_cam - 0.5) * 2
-    mask = (mask & (reference_points_cam[..., 0:1] > -1.0) 
-                 & (reference_points_cam[..., 0:1] < 1.0) 
+    mask = (reference_points_cam[..., 2:3] > eps)   #filter out negative depth, B num_c num_q
+    reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(  #z for depth, too shallow will cause zero division
+        reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)    # eps controls minimum
+
+    # ref_point_visualize = reference_points_cam.clone()
+    #try to normalize to the coordinate in feature map
+    if type(img_metas[0]['ori_shape']) == tuple:    
+        #same size for all images, nuscene  900*1600,floor to 928*1600
+        reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
+        reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
+    else:   
+        #diff size,1280*1920 and 886*1920, waymo, get it to the normorlized point, floor 886 to 896 to meet divisor 32, 
+        # which is 0.7 out of 1 against 1280, that is to say, the remaining 30% is padding
+        reference_points_cam[..., 0] /= img_metas[0]['ori_shape'][0][1]
+        reference_points_cam[..., 1] /= img_metas[0]['ori_shape'][0][0]
+        mask[:, 3:5, :] &= (reference_points_cam[:, 3:5, :, 1:2] < 0.7)
+
+    reference_points_cam = (reference_points_cam - 0.5) * 2     #0~1 to -1~1
+    mask = (mask & (reference_points_cam[..., 0:1] > -1.0)  #we should change the criteria for waymo cam 3~4
+                 & (reference_points_cam[..., 0:1] < 1.0)   # which is -1~0.4
                  & (reference_points_cam[..., 1:2] > -1.0) 
                  & (reference_points_cam[..., 1:2] < 1.0))
+    # maskvis = mask.clone()
     mask = mask.view(B, num_cam, 1, num_query, 1, 1).permute(0, 2, 3, 1, 4, 5)
     mask = torch.nan_to_num(mask)
     sampled_feats = []
@@ -419,4 +434,88 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
         sampled_feats.append(sampled_feat)
     sampled_feats = torch.stack(sampled_feats, -1)
     sampled_feats = sampled_feats.view(B, C, num_query, num_cam,  1, len(mlvl_feats))
+    
+    # import cv2,mmcv
+    # imgs = [mmcv.imread(name) for name in img_metas[0]['filename']]
+    # for i in range(len(imgs)):
+    #     if imgs[i].shape != imgs[0].shape:
+    #         padded = np.zeros(imgs[0].shape)
+    #         padded[:imgs[i].shape[0], :imgs[i].shape[1], :] = imgs[i]
+    #         imgs[i] = padded
+    # exit_cond=1
+    # f = open('debug_image/query_info.txt','w')
+    # for i in range(num_query):
+    #     cnt = torch.sum(maskvis[0, : ,i] == 1)
+    #     if cnt < 0: continue
+    #     f.write(str(cnt)+'\n')
+    #     f.write(str(maskvis[0, : ,i])+'\n')
+    #     exit_cond=1
+    #     color = np.random.randint(256, size=3)
+    #     color = [int(x) for x in color]
+    #     for j in range(num_cam):
+    #         pt = (ref_point_visualize[0,j,i]).cpu().detach().numpy()
+    #         f.write('query {} - cam{}: {} norm: {}\n'.format(i,j,pt,reference_points_cam[0,j,i])) #(B num_c num_q 2)
+    #         f.write(str(maskvis.shape)+'\n')
+    #         f.write(str(ref_point_visualize.shape)+'\n')
+    #         if (maskvis[0,j,i] == 1):
+    #             cv2.circle(imgs[j], (int(pt[0]),int(pt[1])), radius=5 , color = color, thickness = 4)
+    #             cv2.putText(imgs[j], str(i), (int(pt[0]),int(pt[1])),  cv2.FONT_HERSHEY_SIMPLEX, 0.75, color=color)
+    # if exit_cond:
+    #     for i in range(num_cam): 
+    #         mmcv.imwrite(imgs[i], 'debug_image/nuscene_layer1_refpoint_vis_{}.png'.format(i))
+    #     exit(0)
+    # print(img_metas)
     return reference_points_3d, sampled_feats, mask
+
+def load_pts(img_metas):
+    path = img_metas[0]['pts_filename']
+    points = np.fromfile(path, dtype=np.float32)
+    dim = 6
+    if path.find('waymo') == -1:
+        dim=5
+    return points.reshape(-1, dim)
+    
+def save_bev(pts , ref, data_root, out_name = None):
+    import time
+    import torchvision.utils as vutils
+    if isinstance(pts, list):
+        pts = pts[0]
+    if isinstance(pts, np.ndarray):
+        pts = torch.from_numpy(pts)
+    pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+    mask = ((pts[:, 0] > pc_range[0]) & (pts[:, 0] < pc_range[3]) & 
+        (pts[:, 1] > pc_range[1]) & (pts[:, 1] < pc_range[4]) &
+        (pts[:, 2] > pc_range[2]) & (pts[:, 2] < pc_range[5]))
+    pts = pts[mask]
+    res = 0.1
+    x_max = 1 + int((pc_range[3] - pc_range[0]) / res)
+    y_max = 1 + int((pc_range[4] - pc_range[1]) / res)
+    im = torch.zeros(x_max+1, y_max+1, 3)
+    x_img = (pts[:, 0] - pc_range[0]) / res
+    x_img = x_img.round().long()
+    y_img = (pts[:, 1] - pc_range[1]) / res
+    y_img = y_img.round().long()
+    im[x_img, y_img, :] = 1
+
+    for i in [-1, 0, 1]:
+        for j in [-1, 0, 1]:
+            im[(x_img.long()+i).clamp(min=0, max=x_max), 
+                (y_img.long()+j).clamp(min=0, max=y_max), :] = 1
+    print('reference', ref.size())
+    ref_pts_x = (ref[..., 0] * (pc_range[3] - pc_range[0]) / res).round().long()
+    ref_pts_y = (ref[..., 1] * (pc_range[4] - pc_range[1]) / res).round().long()
+    for i in [-2, 0, 2]:
+        for j in [-2, 0, 2]:
+            im[(ref_pts_x.long()+i).clamp(min=0, max=x_max), 
+                (ref_pts_y.long()+j).clamp(min=0, max=y_max), 0] = 1
+            im[(ref_pts_x.long()+i).clamp(min=0, max=x_max), 
+                (ref_pts_y.long()+j).clamp(min=0, max=y_max), 1:2] = 0
+    im = im.permute(2, 0, 1)
+    timestamp = str(time.time())
+    print(timestamp)
+    # saved_root = '/home/chenxy/mmdetection3d/'
+    if out_name == None:
+        out_name = data_root + '/' + timestamp + '.jpg'
+    else :
+        out_name = data_root + '/' + out_name + '.jpg'
+    vutils.save_image(im, out_name)
