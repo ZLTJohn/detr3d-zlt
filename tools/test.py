@@ -227,6 +227,10 @@ def main():
             broadcast_buffers=False)
         outputs = multi_gpu_test(model, data_loader, args.tmpdir,
                                  args.gpu_collect)
+    # print(outputs[0]['pts_bbox']['scores_3d'].size())# 300
+    # print(outputs[1]['pts_bbox']['scores_3d'].size())# 300
+    # print(outputs[2]['pts_bbox']['scores_3d'].size())# 300
+    # exit(0)
     # open('zlt_outputs_debug.txt','w').write(str(outputs))# must not contain image_metas, yes, but why labels all 0/1？？？
     #没有骑车只有骑车和行人也正常...
     # exit(0)

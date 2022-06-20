@@ -265,7 +265,8 @@ class MyResize(object):
             dict: Resized results, 'img_shape', 'pad_shape', 'scale_factor', \
                 'keep_ratio' keys are added into result dict.
         """
-
+        # open('debug_image/myresize_oncall_results.txt','w').write(str(results)+'\n')
+        # exit(0)
         if 'scale' not in results:
             if 'scale_factor' in results:
                 img_shape = results['img'][0].shape[:2]
@@ -435,7 +436,9 @@ class MyLoadMultiViewImageFromFiles(object):
     def pad(self, img):
         # to pad the 5 input images into a same size (for Waymo)
         if img.shape[0] != self.img_scale[0]:
-            img = np.concatenate([img, np.zeros_like(img[0:1280-886,:])], axis=0)
+            padded = np.zeros((self.img_scale[0],self.img_scale[1],3))
+            padded[0:img.shape[0], 0:img.shape[1], :] = img
+            img = padded
         return img
 
     def __call__(self, results):
@@ -457,12 +460,11 @@ class MyLoadMultiViewImageFromFiles(object):
                 - img_norm_cfg (dict): Normalization configuration of images.
         """
         filename = results['img_filename']
-        if self.img_scale is None:
-            img = np.stack(
-                [mmcv.imread(name, self.color_type) for name in filename], axis=-1)
-        else:
-            img = np.stack(
-                [self.pad(mmcv.imread(name, self.color_type)) for name in filename], axis=-1)
+        img = [mmcv.imread(name, self.color_type) for name in filename]
+        results['ori_shape'] = [img_i.shape for img_i in img]
+        if self.img_scale is not None:
+            img = [self.pad(img_i) for img_i in img]
+        img = np.stack(img, axis=-1)
         if self.to_float32:
             img = img.astype(np.float32)
         results['filename'] = filename
@@ -470,16 +472,18 @@ class MyLoadMultiViewImageFromFiles(object):
         # which will transpose each image separately and then stack into array
         results['img'] = [img[..., i] for i in range(img.shape[-1])]
         results['img_shape'] = img.shape
-        results['ori_shape'] = img.shape
         # Set initial values for default meta_keys
         results['pad_shape'] = img.shape
-        # results['scale_factor'] = [1.0, 1.0]
+        # results['scale_factor'] = [1.0, 1.0]####
         num_channels = 1 if len(img.shape) < 3 else img.shape[2]
         results['img_norm_cfg'] = dict(
             mean=np.zeros(num_channels, dtype=np.float32),
             std=np.ones(num_channels, dtype=np.float32),
             to_rgb=False)
         results['img_fields'] = ['img']
+        # for i in range(img.shape[-1]):
+        #     mmcv.imwrite(img[..., i], 'debug_image/new_loaded_{}.png'.format(i))
+        # open('debug_image/new_load_results.txt','w').write(str(results)+'\n')
         return results
 
     def __repr__(self):
@@ -644,7 +648,8 @@ class MyLoadAnnotations3D(LoadAnnotations):
             results = self._load_masks_3d(results)
         if self.with_seg_3d:
             results = self._load_semantic_seg_3d(results)
-
+        # open('debug_image/myloadanno_after_call_results.txt','w').write(str(results)+'\n')
+        # exit(0)
         return results
 
     def __repr__(self):
@@ -660,4 +665,30 @@ class MyLoadAnnotations3D(LoadAnnotations):
         repr_str += f'{indent_str}with_mask={self.with_mask}, '
         repr_str += f'{indent_str}with_seg={self.with_seg}, '
         repr_str += f'{indent_str}poly2mask={self.poly2mask})'
+        return repr_str
+
+@PIPELINES.register_module()
+class MyFilterBoxOutofImage(object):
+    """
+    Filter out the objects that are not in the image, which are contained in results['ann_info']
+    """
+    def __init__(self):
+        self.filter_cnt=0
+        self.total=0
+
+    def __call__(self, results):
+        bbox2d = results['ann_info']['bboxes']
+        keys = results['ann_info'].keys()
+        mask = (bbox2d[..., 0] != 0) & (bbox2d[..., 1] != 0) & (bbox2d[..., 2] != 0) & (bbox2d[..., 3] != 0)
+        for key in keys:
+            results['ann_info'][key] = results['ann_info'][key][mask==True]
+        
+        # self.filter_cnt += bbox2d.shape[0] - results['ann_info']['bboxes'].shape[0]
+        # self.total += bbox2d.shape[0]
+        # print('{}/{}'.format(self.filter_cnt,self.total))
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'zlt plugin'
         return repr_str

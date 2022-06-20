@@ -46,6 +46,10 @@ class PadMultiViewImage(object):
             dict: Updated result dict.
         """
         self._pad_img(results)
+        # imgs = results['img']
+        # ds_name = 'waymo' if len(imgs)==5 else 'nuscene'
+        # for i,img_out in enumerate(imgs):
+        #     mmcv.imwrite(img_out,'debug_forward/{}_after_pad2_{}.png'.format(ds_name, i))
         return results
 
     def __repr__(self):
@@ -80,10 +84,21 @@ class NormalizeMultiviewImage(object):
             dict: Normalized results, 'img_norm_cfg' key is added into
                 result dict.
         """
+        # imgs = results['img']
+        # ds_name = 'waymo' if len(imgs)==5 else 'nuscene'
+        # for i,img_out in enumerate(imgs):
+        #     mmcv.imwrite(img_out,'debug_forward/{}_before_norm_{}.png'.format(ds_name, i))
+
         results['img'] = [mmcv.imnormalize(
             img, self.mean, self.std, self.to_rgb) for img in results['img']]
         results['img_norm_cfg'] = dict(
             mean=self.mean, std=self.std, to_rgb=self.to_rgb)
+        
+        # imgs = results['img']
+        # ds_name = 'waymo' if len(imgs)==5 else 'nuscene'
+        # for i,img_out in enumerate(imgs):
+        #     mmcv.imwrite(img_out,'debug_forward/{}_after_norm_{}.png'.format(ds_name, i))
+
         return results
 
     def __repr__(self):
@@ -131,6 +146,9 @@ class PhotoMetricDistortionMultiViewImage:
         """
         imgs = results['img']
         new_imgs = []
+        # ds_name = 'waymo' if len(imgs)==5 else 'nuscene'
+        # for i,img_out in enumerate(imgs):
+        #     mmcv.imwrite(img_out,'debug_forward/{}_before_distort_{}.png'.format(ds_name, i))
         for img in imgs:
             assert img.dtype == np.float32, \
                 'PhotoMetricDistortion needs the input image of dtype np.float32,'\
@@ -178,6 +196,9 @@ class PhotoMetricDistortionMultiViewImage:
             if random.randint(2):
                 img = img[..., random.permutation(3)]
             new_imgs.append(img)
+        # ds_name = 'waymo' if len(imgs)==5 else 'nuscene'
+        # for i,img_out in enumerate(new_imgs):
+        #     mmcv.imwrite(img_out,'debug_forward/{}_after_distort_{}.png'.format(ds_name, i))
         results['img'] = new_imgs
         return results
 
