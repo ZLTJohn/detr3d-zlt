@@ -60,7 +60,7 @@ class zlt_KITTI2Waymo(object):
         self.name2idx = {}
         for idx, result in enumerate(kitti_result_files):
             if len(result['sample_idx']) > 0:
-                self.name2idx[str(result['sample_idx'][0])] = idx
+                self.name2idx[str(result['sample_idx'][0])] = idx#'000'+  debug oneframe use
 
         # turn on eager execution for older tensorflow versions
         if int(tf.__version__.split('.')[0]) < 2:

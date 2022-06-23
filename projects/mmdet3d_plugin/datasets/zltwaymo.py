@@ -62,7 +62,7 @@ class CustomWaymoDataset(KittiDataset):
                  filter_empty_gt=True,
                  test_mode=False,
                  load_interval=1,
-                 pcd_limit_range=[-85, -85, -5, 85, 85, 5]):
+                 pcd_limit_range=[-85, -85, -5, 85, 85, 5]):#[-75.2, -75.2, -2, 75.2, 75.2, 4] is better
         super().__init__(
             data_root=data_root,
             ann_file=ann_file,
@@ -106,6 +106,7 @@ class CustomWaymoDataset(KittiDataset):
                     lidar to different cameras
                 - ann_info (dict): annotation info
         """
+        # index=475  # in infos_train.pkl is index 485
         info = self.data_infos[index]
         sample_idx = info['image']['image_idx']
         img_filename = os.path.join(self.data_root,
@@ -193,6 +194,8 @@ class CustomWaymoDataset(KittiDataset):
         assert ('waymo' in data_format or 'kitti' in data_format), \
             f'invalid data_format {data_format}'
         print("still work before format_results ---  if not isinstance")
+        # np.save('debug_eval/zltwaymo_eval_result_before_format_results',outputs)
+        # print('saved!')
         # exit(0)
         if (not isinstance(outputs[0], dict)) or 'img_bbox' in outputs[00]:
             raise TypeError('Not supported type for reformat results.')
@@ -213,6 +216,9 @@ class CustomWaymoDataset(KittiDataset):
             result_files = self.bbox2result_kitti(outputs, self.CLASSES,
                                                   pklfile_prefix,
                                                   submission_prefix)
+        # print(result_files)
+        # np.save('debug_eval/zltwaymo_eval_result_kitti_format',result_files)## turn into cam-coord, it sucks
+        # exit(0)
         # open('zlt_output_kitti_format_debug.txt','w').write(str(result_files))  #we got absolutely right data
         # exit(0)  
         if 'waymo' in data_format:
@@ -279,6 +285,9 @@ class CustomWaymoDataset(KittiDataset):
             dict[str: float]: results of each evaluation metric
         """
         print("metric here is-----------{}".format(metric))
+        # np.save('debug_eval/zltwaymo_eval_result',results)
+        # print('saved!')## result still correct here!
+        # exit(0)
         assert ('waymo' in metric or 'kitti' in metric), \
             f'invalid metric {metric}'
         if 'kitti' in metric:
@@ -416,7 +425,8 @@ class CustomWaymoDataset(KittiDataset):
             'invalid list length of network outputs'
         if submission_prefix is not None:
             mmcv.mkdir_or_exist(submission_prefix)
-
+        # np.save('debug_eval/zltwaymo_eval_net_outputs',net_outputs)   # data_size * [output one frame]
+        # exit(0)
         det_annos = []
         print('\nConverting prediction to KITTI format')
         for idx, pred_dicts in enumerate(
@@ -425,8 +435,11 @@ class CustomWaymoDataset(KittiDataset):
             info = self.data_infos[idx]     # 所以我们output是stack起来的，哦因为你eval肯定不需要做random shuffle啊。。。idx直接能对上，所以output不用存
             sample_idx = info['image']['image_idx']
             image_shape = info['image']['image_shape'][:2]
-
+            # if you are going to replace final result.bin with gt boxes, do it here
             box_dict = self.convert_valid_bboxes(pred_dicts, info)
+            # np.save('debug_eval/zltwaymo_box_dict',box_dict)
+            # print(box_dict)
+            # exit(0)
             if len(box_dict['bbox']) > 0:
                 box_2d_preds = box_dict['bbox']
                 box_preds = box_dict['box3d_camera']
@@ -551,9 +564,9 @@ class CustomWaymoDataset(KittiDataset):
         rect = info['calib']['R0_rect'].astype(np.float32)
         Trv2c = info['calib']['Tr_velo_to_cam'].astype(np.float32)
         P0 = info['calib']['P0'].astype(np.float32)
-        P0 = box_preds.tensor.new_tensor(P0)
+        P0 = box_preds.tensor.new_tensor(P0)    # that is to say, box_2d_pred only projected to cam0 image！
 
-        box_preds_camera = box_preds.convert_to(Box3DMode.CAM, rect @ Trv2c)
+        box_preds_camera = box_preds.convert_to(Box3DMode.CAM, rect @ Trv2c) #box3d in camera coord
 
         box_corners = box_preds_camera.corners
         box_corners_in_image = points_cam2img(box_corners, P0)

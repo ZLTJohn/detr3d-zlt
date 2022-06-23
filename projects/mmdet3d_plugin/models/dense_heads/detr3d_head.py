@@ -422,7 +422,7 @@ class Detr3DHead(DETRHead):
         # then we broadcast it to every decoder layer
         # print('gt list len: {}'.format(len(gt_bboxes_list)))
         gt_bboxes_list = [torch.cat(
-            (gt_bboxes.gravity_center, gt_bboxes.tensor[:, 3:]),
+            (gt_bboxes.gravity_center, gt_bboxes.tensor[:, 3:]),        # turn bottm center into gravity center, key step
             dim=1).to(device) for gt_bboxes in gt_bboxes_list]
 
         all_gt_bboxes_list = [gt_bboxes_list for _ in range(num_dec_layers)]
