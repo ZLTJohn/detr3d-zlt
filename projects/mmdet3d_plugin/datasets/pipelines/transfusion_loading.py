@@ -671,15 +671,37 @@ class MyLoadAnnotations3D(LoadAnnotations):
 class MyFilterBoxOutofImage(object):
     """
     Filter out the objects that are not in the image, which are contained in results['ann_info']
+    actually you have to compute if it is in the image by do the lidar2img transform
     """
     def __init__(self):
         self.filter_cnt=0
         self.total=0
+    def check_projected_center_valid(self, lidar2img, bbox3d, ori_shape):
+        lidar2img = np.stack(lidar2img).reshape(1,5,4,4)
+        ori_shape = np.array(ori_shape)
+        center3d = bbox3d.gravity_center.numpy()
+        homo = np.ones([center3d.shape[0],4])
+        homo[...,:3] = center3d
+        homo = homo.reshape(-1,1,4,1)
+        center_proj = np.matmul(lidar2img, homo).squeeze()# 1,5,4,4 | num_gt,1,4,1  ---> num_gt,5, 4, 1
+        eps=1e-5
+        mask = (center_proj[..., 2] > eps) 
+        center_proj = center_proj[..., 0:2] / np.clip(center_proj[..., 2:3], eps, 1e8)
+        mask = mask &(center_proj[...,0]>=0) & (center_proj[...,1]>=0) & \
+               (center_proj[...,0] <= ori_shape[:,1]) & (center_proj[...,1] <= ori_shape[:,0])  #num_gt,5
+        # print(mask.swapaxes(1,0))
+        mask = mask.any(-1)
+        return mask
 
     def __call__(self, results):
         bbox2d = results['ann_info']['bboxes']
+        print(bbox2d)
+        bbox3d = results['ann_info']['gt_bboxes_3d']
+        lidar2img = results['lidar2img']
+        ori_shape = results['ori_shape']
         keys = results['ann_info'].keys()
-        mask = (bbox2d[..., 0] != 0) & (bbox2d[..., 1] != 0) & (bbox2d[..., 2] != 0) & (bbox2d[..., 3] != 0)
+        # mask = (bbox2d[..., 0] != 0) & (bbox2d[..., 1] != 0) & (bbox2d[..., 2] != 0) & (bbox2d[..., 3] != 0)
+        mask = self.check_projected_center_valid(lidar2img, bbox3d, ori_shape)
         for key in keys:
             results['ann_info'][key] = results['ann_info'][key][mask==True]
         
