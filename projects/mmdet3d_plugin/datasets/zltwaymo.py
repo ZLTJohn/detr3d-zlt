@@ -9,6 +9,8 @@ from os import path as osp
 from mmdet3d.datasets import DATASETS #really fucked up for not adding '3d'
 from mmdet3d.core.bbox import Box3DMode, points_cam2img
 from mmdet3d.datasets.kitti_dataset import KittiDataset
+from .waymo_let_metric import compute_waymo_let_metric
+
 @DATASETS.register_module()
 class CustomWaymoDataset(KittiDataset):
     """Waymo Dataset.
@@ -290,38 +292,7 @@ class CustomWaymoDataset(KittiDataset):
         # exit(0)
         assert ('waymo' in metric or 'kitti' in metric), \
             f'invalid metric {metric}'
-        if 'kitti' in metric:
-            result_files, tmp_dir = self.format_results(
-                results,
-                pklfile_prefix,
-                submission_prefix,
-                data_format='kitti')
-            from mmdet3d.core.evaluation import kitti_eval
-            gt_annos = [info['annos'] for info in self.data_infos]
 
-            if isinstance(result_files, dict):
-                ap_dict = dict()
-                for name, result_files_ in result_files.items():
-                    eval_types = ['bev', '3d']
-                    ap_result_str, ap_dict_ = kitti_eval(
-                        gt_annos,
-                        result_files_,
-                        self.CLASSES,
-                        eval_types=eval_types)
-                    for ap_type, ap in ap_dict_.items():
-                        ap_dict[f'{name}/{ap_type}'] = float(
-                            '{:.4f}'.format(ap))
-
-                    print_log(
-                        f'Results of {name}:\n' + ap_result_str, logger=logger)
-
-            else:
-                ap_result_str, ap_dict = kitti_eval(
-                    gt_annos,
-                    result_files,
-                    self.CLASSES,
-                    eval_types=['bev', '3d'])
-                print_log('\n' + ap_result_str, logger=logger)
         if 'waymo' in metric:
             waymo_root = osp.join(
                 self.data_root.split('kitti_format')[0], 'waymo_format')
@@ -336,64 +307,13 @@ class CustomWaymoDataset(KittiDataset):
                 submission_prefix,
                 data_format='waymo')# xxxxxxx not found inside, maybe it's OK
 
-            import subprocess
             import shutil
-            from time import time
             shutil.copy(f'{pklfile_prefix}.bin', 'work_dirs/result.bin')
+            from time import time
             _ = time()
-            ret_bytes = subprocess.check_output(        
-                'mmdetection3d/mmdet3d/core/evaluation/waymo_utils/' +
-                f'compute_detection_metrics_main {pklfile_prefix}.bin ' +
-                f'{waymo_root}/gt.bin',
-                shell=True)
-            ret_texts = ret_bytes.decode('utf-8')
-            print(ret_texts)
-            print("OK after ret_bytes!!!")
-            print_log(ret_texts)
-            print('time usage of compute_detection_metrics_main: {} s'.format(time()-_))
-            # parse the text to get ap_dict
-            ap_dict = {
-                'Vehicle/L1 mAP': 0,
-                'Vehicle/L1 mAPH': 0,
-                'Vehicle/L2 mAP': 0,
-                'Vehicle/L2 mAPH': 0,
-                'Pedestrian/L1 mAP': 0,
-                'Pedestrian/L1 mAPH': 0,
-                'Pedestrian/L2 mAP': 0,
-                'Pedestrian/L2 mAPH': 0,
-                'Sign/L1 mAP': 0,
-                'Sign/L1 mAPH': 0,
-                'Sign/L2 mAP': 0,
-                'Sign/L2 mAPH': 0,
-                'Cyclist/L1 mAP': 0,
-                'Cyclist/L1 mAPH': 0,
-                'Cyclist/L2 mAP': 0,
-                'Cyclist/L2 mAPH': 0,
-                'Overall/L1 mAP': 0,
-                'Overall/L1 mAPH': 0,
-                'Overall/L2 mAP': 0,
-                'Overall/L2 mAPH': 0
-            }
-            mAP_splits = ret_texts.split('mAP ')
-            mAPH_splits = ret_texts.split('mAPH ')
-            for idx, key in enumerate(ap_dict.keys()):
-                split_idx = int(idx / 2) + 1
-                if idx % 2 == 0:  # mAP
-                    ap_dict[key] = float(mAP_splits[split_idx].split(']')[0])
-                else:  # mAPH
-                    ap_dict[key] = float(mAPH_splits[split_idx].split(']')[0])
-            ap_dict['Overall/L1 mAP'] = \
-                (ap_dict['Vehicle/L1 mAP'] + ap_dict['Pedestrian/L1 mAP'] +
-                 ap_dict['Cyclist/L1 mAP']) / 3
-            ap_dict['Overall/L1 mAPH'] = \
-                (ap_dict['Vehicle/L1 mAPH'] + ap_dict['Pedestrian/L1 mAPH'] +
-                 ap_dict['Cyclist/L1 mAPH']) / 3
-            ap_dict['Overall/L2 mAP'] = \
-                (ap_dict['Vehicle/L2 mAP'] + ap_dict['Pedestrian/L2 mAP'] +
-                 ap_dict['Cyclist/L2 mAP']) / 3
-            ap_dict['Overall/L2 mAPH'] = \
-                (ap_dict['Vehicle/L2 mAPH'] + ap_dict['Pedestrian/L2 mAPH'] +
-                 ap_dict['Cyclist/L2 mAPH']) / 3
+            ap_dict = compute_waymo_let_metric(f'{waymo_root}/gt.bin', f'{pklfile_prefix}.bin')
+            print('time usage of compute_let_metric: {} s'.format(time()-_))        
+            
             if eval_tmp_dir is not None:
                 eval_tmp_dir.cleanup()
 

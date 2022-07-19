@@ -690,12 +690,13 @@ class MyFilterBoxOutofImage(object):
         mask = mask &(center_proj[...,0]>=0) & (center_proj[...,1]>=0) & \
                (center_proj[...,0] <= ori_shape[:,1]) & (center_proj[...,1] <= ori_shape[:,0])  #num_gt,5
         # print(mask.swapaxes(1,0))
-        mask = mask.any(-1)
+        # print(mask.shape,'  ',mask.any(-1).shape)
+        mask = mask.any(-1).reshape(-1,1).squeeze(-1)
         return mask
 
     def __call__(self, results):
         bbox2d = results['ann_info']['bboxes']
-        print(bbox2d)
+        # print(bbox2d)
         bbox3d = results['ann_info']['gt_bboxes_3d']
         lidar2img = results['lidar2img']
         ori_shape = results['ori_shape']

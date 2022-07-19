@@ -12,14 +12,14 @@ data_root = 'data/waymo_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
-# resume_from = '/home/zhenglt/detr3d/work_dirs/detr3d_res101_gridmask_waymo/epoch_23.pth'
+# resume_from = '/home/zhengliangtao/detr3d/work_dirs/detr3d_res101_gridmask_waymo/epoch_16.pth'
 # load_from='ckpts/fcos3d.pth'
 class_names = [ # 不确定sign类别是否叫sign
     'Car', 'Pedestrian', 'Cyclist'
 ]
 # If point cloud range is changed, the models should also change their point
 # cloud range accordingly
-point_cloud_range = [-74.88, -74.88, -2, 74.88, 74.88, 4]
+point_cloud_range = [-75, -75, -2, 75, 75, 4]
 voxel_size = [0.2, 0.2, 8]
 num_views = 5
 img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
@@ -132,7 +132,7 @@ train_pipeline = [
     dict(type='MyLoadMultiViewImageFromFiles', to_float32=True, img_scale=(1280, 1920)),#do paddings for ill-shape imgs
     dict(type='MyResize', img_scale=img_scale, keep_ratio=True),
     dict(type='PhotoMetricDistortionMultiViewImage'),
-    dict(type='MyFilterBoxOutofImage'),
+    # dict(type='MyFilterBoxOutofImage'),
     dict(type='MyLoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),

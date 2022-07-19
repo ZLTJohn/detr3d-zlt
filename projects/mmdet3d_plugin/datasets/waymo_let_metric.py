@@ -29,7 +29,7 @@ def build_let_metrics_config():
   config = metrics_pb2.Config(
       box_type=label_pb2.Label.Box.TYPE_3D,
       matcher_type=metrics_pb2.MatcherProto.TYPE_HUNGARIAN,
-      iou_thresholds=[0.0, 0.3, 0.5, 0.5, 0.5],
+      iou_thresholds=[0.0, 0.5, 0.3, 0.3, 0.3],
       score_cutoffs=[i * 0.01 for i in range(100)] + [1.0],
       let_metric_config=let_metric_config)
 
@@ -93,8 +93,8 @@ def compute_let_detection_metrics(prediction_frame_id,
   prediction_overlap_nlz = tf.zeros((num_predictions), tf.bool)
 
   config_str = config.SerializeToString()
-  print(ground_truth_bbox)
-  print(prediction_bbox)
+  # print(ground_truth_bbox)
+  # print(prediction_bbox)
   ap, aph, apl, pr, _, _, _ = py_metrics_ops.detection_metrics(
       prediction_frame_id=tf.cast(prediction_frame_id, tf.int64),
       prediction_bbox=tf.cast(prediction_bbox, tf.float32),
@@ -147,7 +147,7 @@ def parse_metrics_objects_binary_files(ground_truths_path, predictions_path):
       obj.object.detection_difficulty_level = label_pb2.Label.LEVEL_2
     eval_dict['ground_truth_frame_id'].append(obj.frame_timestamp_micros)
     # Note that we use `camera_synced_box` for evaluation.
-    ground_truth_box = obj.object.box##camera_synced_box
+    ground_truth_box = obj.object.camera_synced_box##camera_synced_box
     eval_dict['ground_truth_bbox'].append(
         np.asarray([
             ground_truth_box.center_x,
@@ -183,17 +183,21 @@ def parse_metrics_objects_binary_files(ground_truths_path, predictions_path):
     eval_dict[key] = tf.stack(value)
   return eval_dict
 
-# WAYMO_OPEN_DATASET_DIR = '/content/waymo_open_dataset'
-# FAKE_GROUND_TRUTHS_BIN = ('/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/gt.bin')
-FAKE_GROUND_TRUTHS_BIN = ('/home/zhengliangtao/pure-detr3d/work_dirs/pp_pred_sub.bin')
-    # WAYMO_OPEN_DATASET_DIR + '/metrics/tools/fake_ground_truths.bin')
-FAKE_PREDICTIONS_BIN = ('/home/zhengliangtao/pure-detr3d/work_dirs/pp_pred_sub.bin')
-    # WAYMO_OPEN_DATASET_DIR + '/metrics/tools/fake_predictions.bin')
-
-eval_dict = parse_metrics_objects_binary_files(FAKE_GROUND_TRUTHS_BIN,
-                                               FAKE_PREDICTIONS_BIN)
-metrics_dict = compute_let_detection_metrics(**eval_dict)
-for key, value in metrics_dict.items():
-  if 'SIGN' in key:
-    continue
-  print(f'{key:<55}: {value}')
+def compute_waymo_let_metric(GROUND_TRUTHS_BIN, PREDICTIONS_BIN, show=False):
+    eval_dict = parse_metrics_objects_binary_files(GROUND_TRUTHS_BIN,
+                                               PREDICTIONS_BIN)
+    metrics_dict = compute_let_detection_metrics(**eval_dict)
+    keys = list(metrics_dict.keys())
+    v=[0,0,0]
+    for i in range(0,3):
+      v[i]=(metrics_dict[keys[i]]+metrics_dict[keys[i+3]]+metrics_dict[keys[i+9]])/3.0
+    output = {'OBJECT_TYPE_ALL_NS_LEVEL_2/LET-mAP':   v[0].numpy(),
+              'OBJECT_TYPE_ALL_NS_LEVEL_2/LET-mAPH':  v[1].numpy(),
+              'OBJECT_TYPE_ALL_NS_LEVEL_2/LET-mAPL':  v[2].numpy()}
+    for key, value in metrics_dict.items():
+      if 'SIGN' in key: continue
+      output[key]=value.numpy()
+    if show==True:
+      for key, value in output.items():
+        print(f'{key:<55}: {value}')
+    return output
