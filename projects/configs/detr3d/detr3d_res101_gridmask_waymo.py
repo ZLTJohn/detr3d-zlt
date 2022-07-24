@@ -12,7 +12,7 @@ data_root = 'data/waymo_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
-# resume_from = '/home/zhengliangtao/detr3d/work_dirs/detr3d_res101_gridmask_waymo/epoch_16.pth'
+# resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/detr3d_res101_gridmask_waymo/latest.pth'
 # load_from='ckpts/fcos3d.pth'
 class_names = [ # 不确定sign类别是否叫sign
     'Car', 'Pedestrian', 'Cyclist'
@@ -20,7 +20,7 @@ class_names = [ # 不确定sign类别是否叫sign
 # If point cloud range is changed, the models should also change their point
 # cloud range accordingly
 point_cloud_range = [-75, -75, -2, 75, 75, 4]
-voxel_size = [0.2, 0.2, 8]
+voxel_size = [0.2, 0.2, 6]#no use
 num_views = 5
 img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
 img_scale = (640, 960)
@@ -225,6 +225,6 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
 total_epochs = 24
-evaluation = dict(_delete_=True, interval=4)
+evaluation = dict(_delete_=True, interval=24)
 
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)

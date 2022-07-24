@@ -185,9 +185,9 @@ def parse_metrics_objects_binary_files(ground_truths_path, predictions_path):
 
 # WAYMO_OPEN_DATASET_DIR = '/content/waymo_open_dataset'
 # FAKE_GROUND_TRUTHS_BIN = ('/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/gt.bin')
-FAKE_GROUND_TRUTHS_BIN = ('/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/cam_only_lidar_pts_3class_val_gt.bin')
-    # WAYMO_OPEN_DATASET_DIR + '/metrics/tools/fake_ground_truths.bin')
-FAKE_PREDICTIONS_BIN = ('/home/zhengliangtao/pure-detr3d/work_dirs/detr3d_resnet_waymo_ep24_result.bin')
+FAKE_GROUND_TRUTHS_BIN = ('/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/cam_only_lidar_pts_val_gt.bin')
+    # WAYMO_OPEN_DATASET_DIR + '/metrics/tools/fake_ground_truths.bin')#detr3d_resnet_waymo_ep24_
+FAKE_PREDICTIONS_BIN = ('/home/zhengliangtao/pure-detr3d/work_dirs/result.bin')
     # WAYMO_OPEN_DATASET_DIR + '/metrics/tools/fake_predictions.bin')
 
 eval_dict = parse_metrics_objects_binary_files(FAKE_GROUND_TRUTHS_BIN,
