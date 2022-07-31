@@ -16,9 +16,9 @@ from waymo_open_dataset.protos import breakdown_pb2
 from waymo_open_dataset.protos import metrics_pb2
 from waymo_open_dataset.protos import submission_pb2
 from waymo_open_dataset.utils import box_utils
-
-FILENAME = 'segment-10017090168044687777_6380_000_6400_000_with_camera_labels.tfrecord'
-#name = '/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/validation/segment-10203656353524179475_7625_000_7645_000_with_camera_labels.pkl'
+#more representitive: data/waymo_v131/waymo_format/training/segment-1305342127382455702_3720_000_3740_000_with_camera_labels.tfrecord
+FILENAME = 'data/waymo_v131/waymo_format/training/segment-10017090168044687777_6380_000_6400_000_with_camera_labels.tfrecord'
+#name = '/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/validation/segment-10203656353524179475_7625_000_7645_000_with_camera_labels.tfrecord'
 dataset = tf.data.TFRecordDataset(FILENAME, compression_type='')
 dataset_iter = dataset.as_numpy_iterator()
 

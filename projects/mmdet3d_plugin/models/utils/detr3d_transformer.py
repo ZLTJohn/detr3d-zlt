@@ -482,7 +482,7 @@ def save_bev(pts , ref, data_root, out_name = None):
         pts = pts[0]
     if isinstance(pts, np.ndarray):
         pts = torch.from_numpy(pts)
-    pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+    pc_range=[-75, -75, -2, 75, 75, 4]
     mask = ((pts[:, 0] > pc_range[0]) & (pts[:, 0] < pc_range[3]) & 
         (pts[:, 1] > pc_range[1]) & (pts[:, 1] < pc_range[4]) &
         (pts[:, 2] > pc_range[2]) & (pts[:, 2] < pc_range[5]))
