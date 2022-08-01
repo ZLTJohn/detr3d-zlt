@@ -19,7 +19,8 @@ class_names = [ # 不确定sign类别是否叫sign
 ]
 # If point cloud range is changed, the models should also change their point
 # cloud range accordingly
-point_cloud_range = [-75, -75, -2, 75, 75, 4]
+point_cloud_range = [-35, -75, -2, 75, 75, 4]
+point_cloud_range_polar = [-2.10 , 0, -2, 2.10, 75, 4] # θ_min, r_min, z_min, θ_max, r1_max, z_max
 voxel_size = [0.2, 0.2, 8]
 num_views = 5
 img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
@@ -80,7 +81,7 @@ model = dict(
                             dropout=0.1),
                         dict(
                             type='Detr3DCrossAtten',
-                            pc_range=point_cloud_range,
+                            pc_range=point_cloud_range_polar,
                             num_cams = num_views,
                             num_points=1,
                             embed_dims=256)
@@ -91,11 +92,7 @@ model = dict(
                                      'ffn', 'norm')))),
         bbox_coder=dict(
             type='NMSFreeCoder',
-            # nuscene got point_cloud_range = [-50, -50, -5, 50, 50, 3]
-            # but waymo is point_cloud_range = [-74.88, -74.88, -2, 74.88, 74.88, 4]
-            # orginal post center range is [-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
-            # post_center_range=[-74.88, -74.88, -10.0, -74.88, -74.88, 10.0],
-            post_center_range=[-80, -80, -10.0, 80, 80, 10.0], #transfusion setting
+            post_center_range=point_cloud_range,
             pc_range=point_cloud_range,
             max_num=300,
             voxel_size=voxel_size,

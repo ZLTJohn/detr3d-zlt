@@ -256,7 +256,7 @@ class Detr3DCrossAtten(BaseModule):
         self.init_cfg = init_cfg
         self.dropout = nn.Dropout(dropout)
         self.pc_range = pc_range
-
+        print('DETR3D CrossAttn pc_range: {}'.format(pc_range))
         # you'd better set dim_per_head to a power of 2
         # which is more efficient in the CUDA implementation
         def _is_power_of_2(n):
@@ -388,8 +388,12 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = reference_points.new_tensor(lidar2img) # (B, N, 4, 4)
     reference_points = reference_points.clone()
     reference_points_3d = reference_points.clone()
-    reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
-    reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
+    # reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
+    # reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
+    thetas = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
+    radii =  reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
+    reference_points[..., 0:1] = torch.cos(thetas) * radii
+    reference_points[..., 1:2] = torch.sin(thetas) * radii
     reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
     # reference_points (B, num_queries, 4) ，to homogeneous coordinate
     reference_points = torch.cat((reference_points, torch.ones_like(reference_points[..., :1])), -1)
