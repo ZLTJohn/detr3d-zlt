@@ -20,7 +20,7 @@ class_names = [ # 不确定sign类别是否叫sign
 # If point cloud range is changed, the models should also change their point
 # cloud range accordingly
 point_cloud_range = [-35, -75, -2, 75, 75, 4]
-point_cloud_range_polar = [-2.10 , 0, -2, 2.10, 75, 4] # θ_min, r_min, z_min, θ_max, r1_max, z_max
+point_cloud_range_polar = [-2.10 , 0, -2, 2.10, 75, 4, 'polar_coordinates'] # θ_min, r_min, z_min, θ_max, r1_max, z_max
 voxel_size = [0.2, 0.2, 8]
 num_views = 5
 img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
@@ -93,7 +93,7 @@ model = dict(
         bbox_coder=dict(
             type='NMSFreeCoder',
             post_center_range=point_cloud_range,
-            pc_range=point_cloud_range,
+            pc_range=point_cloud_range_polar,
             max_num=300,
             voxel_size=voxel_size,
             num_classes=3), 
