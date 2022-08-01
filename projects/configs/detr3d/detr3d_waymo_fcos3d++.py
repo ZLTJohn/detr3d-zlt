@@ -12,7 +12,7 @@ data_root = 'data/waymo_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
-resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/detr3d_waymo_fcos3d++/epoch_14_copy.pth'
+# resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/detr3d_waymo_fcos3d++/epoch_14_copy.pth'
 # load_from='ckpts/fcos3d.pth'
 class_names = [ # 不确定sign类别是否叫sign
     'Car', 'Pedestrian', 'Cyclist'

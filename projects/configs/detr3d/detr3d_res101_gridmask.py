@@ -223,4 +223,4 @@ evaluation = dict(interval=2, pipeline=test_pipeline)
 
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
 # load_from='/home/chenxuanyao/checkpoint/fcos3d_detr3d.pth'
-load_from = '/home/zhengliangtao/fcos3d_yue.pth'
+load_from = 'ckpts/fcos3d_yue.pth'

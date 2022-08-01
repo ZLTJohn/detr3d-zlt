@@ -3,7 +3,7 @@ bash tools/dist_train.sh projects/configs/detr3d/detr3d_res101_gridmask_waymo.py
 bash tools/dist_test.sh projects/configs/detr3d/detr3d_res101_gridmask_waymo.py work_dirs/detr3d_res101_gridmask_waymo/epoch_10.pth 8 --eval=waymo
 testing:
 # don't forget to edit the config file first!!!
-bash tools/dist_test.sh projects/configs/detr3d/detr3d_res101_gridmask_waymo.py work_dirs/detr3d_res101_gridmask_waymo/epoch_24.pth 4 --format-only --eval-options 'pklfile_prefix=result/waymo_test_bbox_pred' 'submission_prefix=results/waymo_test_bbox_pred'
+bash tools/dist_test.sh projects/configs/detr3d/detr3d_res101_gridmask_waymo.py work_dirs/detr3d_res101_gridmask_waymo/epoch_24.pth 4 --format-only --eval-options 'pklfile_prefix=result/waymo_test_bbox_pred' 'submission_prefix=result/waymo_test_bbox_pred'
 tensorboard --logdir=tf_logs --bind_all
 create_submission:
 ./tools/waymo_tools/create_submission \

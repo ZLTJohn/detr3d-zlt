@@ -92,11 +92,7 @@ model = dict(
                                      'ffn', 'norm')))),
         bbox_coder=dict(
             type='NMSFreeCoder',
-            # nuscene got point_cloud_range = [-50, -50, -5, 50, 50, 3]
-            # but waymo is point_cloud_range = [-74.88, -74.88, -2, 74.88, 74.88, 4]
-            # orginal post center range is [-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
-            # post_center_range=[-74.88, -74.88, -10.0, -74.88, -74.88, 10.0],
-            post_center_range=[-80, -80, -10.0, 80, 80, 10.0], #transfusion setting
+            post_center_range=point_cloud_range,
             pc_range=point_cloud_range,
             max_num=300,
             voxel_size=voxel_size,
@@ -118,7 +114,7 @@ model = dict(
     train_cfg=dict(pts=dict(
         grid_size=[512, 512, 1],
         voxel_size=voxel_size,
-        point_cloud_range=point_cloud_range,
+        point_cloud_range=point_cloud_range,# 似乎没用
         out_size_factor=4,
         assigner=dict(
             type='HungarianAssigner3D',

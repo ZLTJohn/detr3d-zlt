@@ -19,7 +19,7 @@ class NMSFreeCoder(BaseBBoxCoder):
     """
 
     def __init__(self,
-                 pc_range,
+                 pc_range=None,
                  voxel_size=None,
                  post_center_range=None,
                  max_num=100,
@@ -56,7 +56,7 @@ class NMSFreeCoder(BaseBBoxCoder):
         bbox_index = indexs // self.num_classes
         bbox_preds = bbox_preds[bbox_index]
 
-        final_box_preds = denormalize_bbox(bbox_preds, self.pc_range)   
+        final_box_preds = denormalize_bbox(bbox_preds, None)   #denormalized_bboxes = torch.cat([cx, cy, cz, w, l, h, rot, vx, vy], dim=-1)
         final_scores = scores 
         final_preds = labels 
 

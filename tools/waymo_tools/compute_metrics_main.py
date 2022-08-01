@@ -182,12 +182,13 @@ def parse_metrics_objects_binary_files(ground_truths_path, predictions_path):
   for key, value in eval_dict.items():
     eval_dict[key] = tf.stack(value)
   return eval_dict
-
+from time import time
+_=time()
 # WAYMO_OPEN_DATASET_DIR = '/content/waymo_open_dataset'
 # FAKE_GROUND_TRUTHS_BIN = ('/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/gt.bin')
-FAKE_GROUND_TRUTHS_BIN = ('/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/cam_only_lidar_pts_val_gt.bin')
+FAKE_GROUND_TRUTHS_BIN = ('/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/gt.bin')
     # WAYMO_OPEN_DATASET_DIR + '/metrics/tools/fake_ground_truths.bin')#detr3d_resnet_waymo_ep24_
-FAKE_PREDICTIONS_BIN = ('/home/zhengliangtao/pure-detr3d/work_dirs/result.bin')
+FAKE_PREDICTIONS_BIN = ('/home/zhengliangtao/pure-detr3d/result/detr3d_waymo_fcos++_val_bbox_pred.bin')
     # WAYMO_OPEN_DATASET_DIR + '/metrics/tools/fake_predictions.bin')
 
 eval_dict = parse_metrics_objects_binary_files(FAKE_GROUND_TRUTHS_BIN,
@@ -207,3 +208,4 @@ for key, value in metrics_dict.items():
 if True:
   for key, value in output.items():
     print(f'{key:<55}: {value}')
+print('compute metrics takes {} seconds.'.format(time()-_))
