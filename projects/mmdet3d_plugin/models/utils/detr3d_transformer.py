@@ -385,6 +385,9 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     for img_meta in img_metas:
         lidar2img.append(img_meta['lidar2img'])
     lidar2img = np.asarray(lidar2img)
+    # import hashlib
+    # print(lidar2img[0,0])
+    # print(hashlib.md5(lidar2img[0,0]).hexdigest())
     lidar2img = reference_points.new_tensor(lidar2img) # (B, N, 4, 4)
     reference_points = reference_points.clone()
     reference_points_3d = reference_points.clone()
