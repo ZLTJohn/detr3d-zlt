@@ -6,8 +6,8 @@ plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 
 dataset_type = 'CustomWaymoDataset'
-data_root = 'data/waymo_subset_v131/kitti_format/'
-# data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
+# data_root = 'data/waymo_subset_v131/kitti_format/'
+data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
@@ -21,7 +21,7 @@ class_names = [ # 不确定sign类别是否叫sign
 # cloud range accordingly
 point_cloud_range = [-35, -75, -2, 75, 75, 4]
 point_cloud_range_polar = [-2.10 , 0, -2, 2.10, 75, 4, 'polar_coordinates'] # θ_min, r_min, z_min, θ_max, r1_max, z_max
-voxel_size = [0.2, 0.2, 8]
+voxel_size = [0.5, 0.5, 6]
 num_views = 5
 img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
 img_scale = (640, 960)
@@ -38,6 +38,7 @@ model = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
+        # with_cp=True,
         norm_cfg=dict(type='BN2d', requires_grad=False),
         norm_eval=True,
         style='caffe',
@@ -190,13 +191,12 @@ data = dict(
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
         box_type_3d='LiDAR'),
-        # load one frame every five frames does NOT make sense here
     test=dict(
         type=dataset_type,
         data_root=data_root,
         num_views=num_views,
-        ann_file=data_root + 'waymo_infos_test.pkl',
-        split='testing',
+        ann_file=data_root + 'waymo_infos_val.pkl',
+        split='training',
         pipeline=test_pipeline,
         modality=input_modality,
         classes=class_names,
@@ -222,6 +222,6 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
 total_epochs = 24
-evaluation = dict(_delete_=True, interval=4)
+evaluation = dict(_delete_=True, interval=24)
 
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
