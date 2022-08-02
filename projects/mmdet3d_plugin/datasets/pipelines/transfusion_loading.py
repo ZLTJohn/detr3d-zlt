@@ -667,6 +667,57 @@ class MyLoadAnnotations3D(LoadAnnotations):
         repr_str += f'{indent_str}poly2mask={self.poly2mask})'
         return repr_str
 
+# @PIPELINES.register_module()
+# class MyLiDARObjectRangeFilter_TBD(object):  ##TBD
+#     """Filter ONLY LiDAR objects by the range.
+
+#     Args:
+#         point_cloud_range (list[float]): Point cloud range.
+#     """
+
+#     def __init__(self, point_cloud_range):
+#         self.pcd_range = point_cloud_range
+
+#     def __call__(self, input_dict):
+#         """Call function to filter objects by the range.
+
+#         Args:
+#             input_dict (dict): Result dict from loading pipeline.
+
+#         Returns:
+#             dict: Results after filtering, 'gt_bboxes_3d', 'gt_labels_3d'
+#                 keys are updated in the result dict.
+#         """
+#         # Check points instance type and initialise bev_range
+#         assert isinstance(input_dict['gt_bboxes_3d'], (LiDARInstance3DBoxes))
+#             bev_range = self.pcd_range[[0, 1, 3, 4]]
+
+#         gt_bboxes_3d = input_dict['gt_bboxes_3d']
+#         gt_labels_3d = input_dict['gt_labels_3d']
+
+#         # mask = gt_bboxes_3d.in_range_bev(bev_range)
+#         # gt_bboxes_3d = gt_bboxes_3d[mask]
+#         # TBD
+
+#         # mask is a torch tensor but gt_labels_3d is still numpy array
+#         # using mask to index gt_labels_3d will cause bug when
+#         # len(gt_labels_3d) == 1, where mask=1 will be interpreted
+#         # as gt_labels_3d[1] and cause out of index error
+#         gt_labels_3d = gt_labels_3d[mask.numpy().astype(np.bool)]
+
+#         # limit rad to [-pi, pi]
+#         gt_bboxes_3d.limit_yaw(offset=0.5, period=2 * np.pi)
+#         input_dict['gt_bboxes_3d'] = gt_bboxes_3d
+#         input_dict['gt_labels_3d'] = gt_labels_3d
+
+#         return input_dict
+
+#     def __repr__(self):
+#         """str: Return a string that describes the module."""
+#         repr_str = self.__class__.__name__
+#         repr_str += f'(point_cloud_range={self.pcd_range.tolist()})'
+#         return repr_str
+
 @PIPELINES.register_module()
 class MyFilterBoxOutofImage(object):
     """
