@@ -136,3 +136,4 @@ debug*/
 submission/
 result/
 projects/configs/test_lr_waymo/test_lr_detr3d_waymo_fcos3d++.py
+mmdetection3d
