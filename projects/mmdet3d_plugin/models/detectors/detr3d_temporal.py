@@ -3,6 +3,7 @@ import numpy as np
 import time
 import torchvision.utils as vutils
 import torch
+import copy
 
 from mmcv.runner import force_fp32, auto_fp16
 from mmdet.models import DETECTORS
@@ -12,7 +13,7 @@ from projects.mmdet3d_plugin.models.utils.grid_mask import GridMask
 
 
 @DETECTORS.register_module()
-class Detr3D(MVXTwoStageDetector):
+class Detr3D_T(MVXTwoStageDetector):
     """Detr3D."""
 
     def __init__(self,
@@ -31,7 +32,7 @@ class Detr3D(MVXTwoStageDetector):
                  train_cfg=None,
                  test_cfg=None,
                  pretrained=None):
-        super(Detr3D,
+        super(Detr3D_T,
               self).__init__(pts_voxel_layer, pts_voxel_encoder,
                              pts_middle_encoder, pts_fusion_layer,
                              img_backbone, pts_backbone, img_neck, pts_neck,
@@ -40,14 +41,14 @@ class Detr3D(MVXTwoStageDetector):
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         self.use_grid_mask = use_grid_mask
 
-    def extract_img_feat(self, img, img_metas):
+    def extract_img_feat(self, img, img_metas, len_queue=None):
         """Extract features of images."""
         B = img.size(0)
         if img is not None:
-            input_shape = img.shape[-2:]#bs nchw
+            # input_shape = img.shape[-2:]#bs nchw
             # update real input shape of each single img
-            for img_meta in img_metas:
-                img_meta.update(input_shape=input_shape)
+            # for img_meta in img_metas:
+            #     img_meta.update(input_shape=input_shape)
 
             if img.dim() == 5 and img.size(0) == 1:
                 img.squeeze_()
@@ -66,13 +67,16 @@ class Detr3D(MVXTwoStageDetector):
         img_feats_reshaped = []
         for img_feat in img_feats:
             BN, C, H, W = img_feat.size()
-            img_feats_reshaped.append(img_feat.view(B, int(BN / B), C, H, W))
+            if len_queue is not None:
+                img_feats_reshaped.append(img_feat.view(int(B/len_queue), len_queue, int(BN / B), C, H, W))
+            else:
+                img_feats_reshaped.append(img_feat.view(B, int(BN / B), C, H, W))
         return img_feats_reshaped
 
     @auto_fp16(apply_to=('img'), out_fp32=True)
-    def extract_feat(self, img, img_metas):
+    def extract_feat(self, img, img_metas, len_queue=None):
         """Extract features from images and points."""
-        img_feats = self.extract_img_feat(img, img_metas)
+        img_feats = self.extract_img_feat(img, img_metas, len_queue)
         return img_feats
 
     def forward_pts_train(self,
@@ -80,7 +84,10 @@ class Detr3D(MVXTwoStageDetector):
                           gt_bboxes_3d,
                           gt_labels_3d,
                           img_metas,
-                          gt_bboxes_ignore=None):
+                          gt_bboxes_ignore=None,
+                          prev_img_feat=None, 
+                          prev_img_metas=None
+                          ):
         """Forward function for point cloud branch.
         Args:
             pts_feats (list[torch.Tensor]): Features of point cloud branch
@@ -96,7 +103,7 @@ class Detr3D(MVXTwoStageDetector):
         """
         # print(img_metas[0])
         # exit(0)
-        outs = self.pts_bbox_head(pts_feats, img_metas)
+        outs = self.pts_bbox_head(pts_feats, img_metas, prev_img_feat, prev_img_metas)
         # bbox_list = self.pts_bbox_head.get_bboxes(
         #     outs, img_metas, rescale=False)
         # import cv2
@@ -126,6 +133,15 @@ class Detr3D(MVXTwoStageDetector):
             return self.forward_train(**kwargs)
         else:
             return self.forward_test(**kwargs)
+    def obtain_history_feat(self, imgs_queue, img_metas_list):
+        self.eval()
+        with torch.no_grad():
+            prev_bev = None
+            bs, len_queue, num_cams, C, H, W = imgs_queue.shape
+            imgs_queue = imgs_queue.reshape(bs*len_queue, num_cams, C, H, W)
+            img_feats_list = self.extract_feat(img=imgs_queue, img_metas=None, len_queue=len_queue)
+            self.train()
+            return img_feats_list
 
     def forward_train(self,
                       points=None,
@@ -167,14 +183,25 @@ class Detr3D(MVXTwoStageDetector):
         # save_bbox2img(img, gt_bboxes_3d, img_metas, name = name)
         # save_bbox2bev(gt_bboxes_3d, img_metas, name=name)
         # exit(0)
+
+        len_queue = img.size(1)
+        prev_img = img[:, :-1, ...]
+        img = img[:, -1, ...]
+        prev_img_metas = copy.deepcopy(img_metas)
+        prev_img_feat = self.obtain_history_feat(prev_img, prev_img_metas)
+        # prev_bev = None
+        img_metas = [each[len_queue-1] for each in img_metas]
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
+        # breakpoint()
         losses = dict()
         losses_pts = self.forward_pts_train(img_feats, gt_bboxes_3d,
                                             gt_labels_3d, img_metas,
-                                            gt_bboxes_ignore)
+                                            gt_bboxes_ignore, prev_img_feat, prev_img_metas)
+                                            # [num_scale] [bs T cam c h w] # bs dict(0~T-1)
+
         losses.update(losses_pts)
         return losses
-    
+    # test is yet to be changed
     def forward_test(self, img_metas, img=None, **kwargs):
         # open('debug_forward/waymo_test_img_metas.txt','w').write(str(img_metas)+'\ninput img shape:'+str(img[0].shape)+'\nlen of img list'+str(len(img)))
         # exit(0)
@@ -216,177 +243,3 @@ class Detr3D(MVXTwoStageDetector):
         for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
             result_dict['pts_bbox'] = pts_bbox
         return bbox_list    #list of dict of pts_bbox=dict(bboxes scores labels), len()=batch size
-
-    def aug_test_pts(self, feats, img_metas, rescale=False):
-        feats_list = []
-        for j in range(len(feats[0])):
-            feats_list_level = []
-            for i in range(len(feats)):
-                feats_list_level.append(feats[i][j])
-            feats_list.append(torch.stack(feats_list_level, -1).mean(-1))
-        outs = self.pts_bbox_head(feats_list, img_metas)
-        bbox_list = self.pts_bbox_head.get_bboxes(
-            outs, img_metas, rescale=rescale)
-        bbox_results = [
-            bbox3d2result(bboxes, scores, labels)
-            for bboxes, scores, labels in bbox_list
-        ]
-        return bbox_results
-
-    def aug_test(self, img_metas, imgs=None, rescale=False):
-        """Test function with augmentaiton."""
-        img_feats = self.extract_feats(img_metas, imgs)
-        img_metas = img_metas[0]
-        bbox_list = [dict() for i in range(len(img_metas))]
-        bbox_pts = self.aug_test_pts(img_feats, img_metas, rescale)
-        for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
-            result_dict['pts_bbox'] = pts_bbox
-        return bbox_list
-
-
-def save_bbox2img(img, gt_bboxes_3d, img_metas, dirname='debug_coord', name = None):
-    # print(img)
-    ds_name = 'waymo' if len(img_metas[0]['filename'])==5 else 'nuscene'
-    # for i,name in enumerate(img_metas[0]['filename']):
-    #     img_out = img[0][i].permute(1,2,0).detach().cpu().numpy()
-    #     img_in = cv2.imread(name)
-    #     print(img_in)
-    #     print(img_out.shape)
-    #     cv2.imwrite('debug_forward/{}_input_vis_finalcheck_{}.png'.format(ds_name, i),img_out)
-    gt_bboxes_3d = gt_bboxes_3d[0]
-    reference_points = gt_bboxes_3d.gravity_center.view(1, -1, 3) # 1 num_gt, 3
-    # reference_points = gt_bboxes_3d.bottom_center.view(1, -1, 3)
-    print(reference_points.size())
-    # num_gt as num_query
-    lidar2img = []
-    for img_meta in img_metas:
-        lidar2img.append(img_meta['lidar2img'])
-    lidar2img = np.asarray(lidar2img)
-    lidar2img = reference_points.new_tensor(lidar2img) # (B, N, 4, 4)
-    # reference_points (B, num_queries, 4) ，to homogeneous coordinate
-    reference_points = torch.cat((reference_points, torch.ones_like(reference_points[..., :1])), -1)
-
-    B, num_query = reference_points.size()[:2]
-    num_cam = lidar2img.size(1)
-    reference_points = reference_points.view(B, 1, num_query, 4).repeat(1, num_cam, 1, 1).unsqueeze(-1)##B num_c num_q 4 ,1
-    lidar2img = lidar2img.view(B, num_cam, 1, 4, 4).repeat(1, 1, num_query, 1, 1)   # B num_c num_q 4 4
-    reference_points_cam = torch.matmul(lidar2img, reference_points).squeeze(-1)    # B num_c num_q 4
-    eps = 1e-5
-    mask = (reference_points_cam[..., 2:3] > eps)   #filter out negative depth, B num_c num_q
-    reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(  #z for depth, too shallow will cause zero division
-        reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)    # eps controls minimum
-
-    # ref_point_visualize = reference_points_cam.clone()
-    #try to normalize to the coordinate in feature map
-    if type(img_metas[0]['ori_shape']) == tuple:    
-        #same size for all images, nuscene  900*1600,floor to 928*1600
-        reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
-        reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
-    else:
-        #diff size,1280*1920 and 886*1920, waymo, get it to the normorlized point, floor 886 to 896 to meet divisor 32, 
-        # which is 0.7 out of 1 against 1280, that is to say, the remaining 30% is padding
-        reference_points_cam[..., 0] /= img_metas[0]['ori_shape'][0][1]
-        reference_points_cam[..., 1] /= img_metas[0]['ori_shape'][0][0]
-        print(img_metas[0]['ori_shape'])
-        mask[:, 3:5, :] &= (reference_points_cam[:, 3:5, :, 1:2] < 0.7)
-
-    # reference_points_cam = (reference_points_cam - 0.5) * 2       #0~1 to -1~1
-    mask = (mask & (reference_points_cam[..., 0:1] > 0)  #we should change the criteria for waymo cam 3~4
-                 & (reference_points_cam[..., 0:1] < 1)   # which is -1~0.4
-                 & (reference_points_cam[..., 1:2] > 0) 
-                 & (reference_points_cam[..., 1:2] < 1))  # B num_cam num_query
-    print(mask.any()==False)
-    # print(lidar2img.shape)# 1 5 4 4
-    # print(img)      #shape 1 5 3 640 960s
-    # print(gt_bboxes_3d.gravity_center)#[x,y,z,w,l,h,rot] #z is not gravity center
-    if (name == None):
-        name = str(time.time())
-    for i in range(num_cam):
-        # img_out = img[0][i].permute(1,2,0).detach().cpu().numpy()
-        img_out = cv2.imread(img_metas[0]['filename'][i])
-        h,w,_ = img_metas[0]['ori_shape'][0]#img_out.shape
-        print(h,w)
-        # print(img_out)
-        # print(img_in)
-
-        for j in range(num_query):
-            pt = reference_points_cam[0,i,j]
-            print(pt,'  ',mask[0,i,j])
-            if mask[0,i,j] == True:
-                color = np.random.randint(256, size=3)
-                color = [int(x) for x in color]
-                cv2.circle(img_out, (int(pt[0]*w),int(pt[1]*h)), radius=5,color=color, thickness = 4)
-        cv2.imwrite(dirname+'/{}_{}_{}.png'.format(ds_name,name, i), img_out)
-
-def save_bbox_pred(bbox_pts, img, img_metas):
-    # print(bbox_pts[0])## get our favourite frame id=475 in zltwaymo
-    print(len(bbox_pts[0]))
-    # print(bbox_pts[0]['boxes_3d'])
-    # np.save(dir+'/bbox_pred',bbox_pts[0]['boxes_3d'].tensor.detach().cpu().numpy())
-    name = str(time.time())
-    save_bbox2bev([ bbox_pts[0]['boxes_3d'][:30] ], img_metas, 'debug_eval', name)
-    save_bbox2img(img, [ bbox_pts[0]['boxes_3d'][:30] ], img_metas, 'debug_eval', name)
-    ds_name = 'waymo' if len(img_metas[0]['filename'])==5 else 'nuscene'
-    # print(img.size())
-    # print(img_metas[0])
-    for i in range(img.size(0)):
-        # img_out = img[i].permute(1,2,0).detach().cpu().numpy()
-        img_in = cv2.imread(img_metas[0]['filename'][i])
-        cv2.imwrite('debug_eval/{}_input_tensor_{}.png'.format(ds_name, i), img_in)
-
-def save_bbox2bev(gt_bboxes_3d, img_metas, dir = 'debug_coord', name = 'gt_bev'):
-    pc = load_pts(img_metas)
-    gt_bboxes_3d = gt_bboxes_3d[0]
-    reference_points = gt_bboxes_3d.gravity_center.view(1, -1, 3) # 1 num_gt, 3
-    save_bev(pc, reference_points, dir, name)
-
-def load_pts(img_metas):
-    path = img_metas[0]['pts_filename']
-    points = np.fromfile(path, dtype=np.float32)
-    dim = 6
-    if path.find('waymo') == -1:
-        dim=5
-    return points.reshape(-1, dim)
-    
-def save_bev(pts , ref, data_root, out_name = None):
-    if isinstance(pts, list):
-        pts = pts[0]
-    if isinstance(pts, np.ndarray):
-        pts = torch.from_numpy(pts)
-    pc_range= [-75.2, -75.2, -2, 75.2, 75.2, 4]
-    mask = ((pts[:, 0] > pc_range[0]) & (pts[:, 0] < pc_range[3]) & 
-        (pts[:, 1] > pc_range[1]) & (pts[:, 1] < pc_range[4]) &
-        (pts[:, 2] > pc_range[2]) & (pts[:, 2] < pc_range[5]))
-    pts = pts[mask]
-    res = 0.1
-    x_max = 1 + int((pc_range[3] - pc_range[0]) / res)
-    y_max = 1 + int((pc_range[4] - pc_range[1]) / res)
-    im = torch.zeros(x_max+1, y_max+1, 3)
-    x_img = (pts[:, 0] - pc_range[0]) / res
-    x_img = x_img.round().long()
-    y_img = (pts[:, 1] - pc_range[1]) / res
-    y_img = y_img.round().long()
-    im[x_img, y_img, :] = 1
-
-    for i in [-1, 0, 1]:
-        for j in [-1, 0, 1]:
-            im[(x_img.long()+i).clamp(min=0, max=x_max), 
-                (y_img.long()+j).clamp(min=0, max=y_max), :] = 1
-    print('reference', ref.size())
-    ref_pts_x = ((ref[..., 0] - pc_range[0]) / res).round().long()
-    ref_pts_y = ((ref[..., 1] - pc_range[1]) / res).round().long()
-    for i in range(-5,6):
-        for j in range(-5,6):
-            im[(ref_pts_x.long()+i).clamp(min=0, max=x_max), 
-                (ref_pts_y.long()+j).clamp(min=0, max=y_max), 0] = 1
-            im[(ref_pts_x.long()+i).clamp(min=0, max=x_max), 
-                (ref_pts_y.long()+j).clamp(min=0, max=y_max), 1:2] = 0
-    im = im.permute(2, 0, 1)
-    timestamp = str(time.time())
-    print(timestamp)
-    # saved_root = '/home/chenxy/mmdetection3d/'
-    if out_name == None:
-        out_name = data_root + '/' + timestamp + '.jpg'
-    else :
-        out_name = data_root + '/' + out_name + '.jpg'
-    vutils.save_image(im, out_name)
