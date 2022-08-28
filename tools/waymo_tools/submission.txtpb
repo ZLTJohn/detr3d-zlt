@@ -4,7 +4,7 @@
 task: CAMERA_ONLY_DETECTION_3D
 account_name: "johncastle248@gmail.com"
 # Change this to your unique method name. Max 25 chars.
-unique_method_name: "new_born_test"
+unique_method_name: "detr3d_fullres_polarCoord"
 
 authors: "zlt"
 authors: "Author2"
