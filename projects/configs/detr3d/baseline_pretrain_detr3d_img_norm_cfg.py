@@ -14,7 +14,7 @@ data_root = 'data/waymo_v131/kitti_format/'
 file_client_args = dict(backend='disk')
 # resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/detr3d_waymo_fcos3d++/epoch_14_copy.pth'
 # load_from='ckpts/fcos3d.pth'
-# load_from = 'ckpts/waymo_pretrain_pgd_mv_8gpu_for_detr3d_backbone_statedict_only.pth'
+load_from = 'ckpts/pretrain_pgd_mv_8gpu_0.5lr_detr3d_ImgNormCfg_for_detr3d_backbone_statedict_only.pth'
 class_names = [ # 不确定sign类别是否叫sign
     'Car', 'Pedestrian', 'Cyclist'
 ]
@@ -23,9 +23,8 @@ class_names = [ # 不确定sign类别是否叫sign
 point_cloud_range = [-35, -75, -2, 75, 75, 4]
 voxel_size = [0.5, 0.5, 6]
 num_views = 5
-# img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
-img_norm_cfg = dict(
-    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
+img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
+# img_norm_cfg = dict(mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 img_scale = (640, 960)
 input_modality = dict(
     use_lidar=False,
@@ -46,9 +45,9 @@ model = dict(
         style='pytorch',
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
         stage_with_dcn=(False, False, True, True),
-        init_cfg=dict(
-            type='Pretrained',
-            checkpoint='open-mmlab://detectron2/resnet101_caffe')
+        # init_cfg=dict(
+        #     type='Pretrained',
+        #     checkpoint='open-mmlab://detectron2/resnet101_caffe')
         ),
     img_neck=dict(
         type='FPN',
@@ -174,7 +173,7 @@ data = dict(
             type=dataset_type,
             data_root=data_root,
             num_views=num_views,
-            ann_file=data_root + 'waymo_infos_trainval.pkl',
+            ann_file=data_root + 'waymo_infos_train.pkl',
             split='training',
             pipeline=train_pipeline,
             modality=input_modality,
@@ -202,8 +201,8 @@ data = dict(
         type=dataset_type,
         data_root=data_root,
         num_views=num_views,
-        ann_file=data_root + 'waymo_infos_test.pkl',
-        split='testing',
+        ann_file=data_root + 'waymo_infos_val.pkl',
+        split='training',
         pipeline=test_pipeline,
         modality=input_modality,
         classes=class_names,

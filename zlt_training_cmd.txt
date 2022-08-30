@@ -6,9 +6,10 @@ testing:
 bash tools/dist_test.sh projects/configs/detr3d/detr3d_res101_gridmask_waymo.py work_dirs/detr3d_res101_gridmask_waymo/epoch_24.pth 8 --format-only --eval-options 'pklfile_prefix=result/waymo_test_bbox_pred' 'submission_prefix=result/waymo_test_bbox_pred'
 tensorboard --logdir=tf_logs --bind_all
 create_submission:
+mkdir -p submission/detr3d_waymo_test_1
 ./tools/waymo_tools/create_submission \
-                        --input_filenames='work_dirs/full_res+polar_coord/full_res+polar_coord_result.bin' \
-                        --output_filename='submission/detr3d_waymo_val_0/file'\
+                        --input_filenames='result/waymo_test_bbox_pred_bin.bin' \
+                        --output_filename='submission/detr3d_waymo_test_1/file'\
                         --submission_filename='tools/waymo_tools/submission.txtpb'
                         
 tar -cvf submission/detr3d_waymo_test_0.tar submission/detr3d_waymo_test_0/
@@ -26,3 +27,5 @@ export CUDA_VISIBLE_DEVICES=1,2,3
 
 git clone ssh://$ServerName/~/mmdet3d
 git remote add origin ssh://$ServerName/~/mmdet3d
+
+bash tools/dist_test.sh  projects/configs/detr3d/baseline_trainval.py work_dirs/baseline_trainval/latest.pth 8 --format-only --eval-options 'pklfile_prefix=result/waymo_test_bbox_pred_bin' 'submission_prefix=result/waymo_test_bbox_pred'
