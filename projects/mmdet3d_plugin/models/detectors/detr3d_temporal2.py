@@ -40,7 +40,7 @@ class Detr3D_T2(MVXTwoStageDetector):
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         self.use_grid_mask = use_grid_mask
 
-      def extract_img_feat(self, img, img_metas, len_queue=None):
+    def extract_img_feat(self, img, img_metas, len_queue=None):
         """Extract features of images."""
         B = img.size(0)
         if img is not None:
@@ -83,6 +83,7 @@ class Detr3D_T2(MVXTwoStageDetector):
                           gt_labels_3d,
                           img_metas_T, # [bs]->[bs]*dict(range(T))
                           gt_bboxes_ignore=None):
+        # breakpoint()
         len_queue = pts_feats_T[0].shape[1]
         self.eval()
         with torch.no_grad():
@@ -95,6 +96,7 @@ class Detr3D_T2(MVXTwoStageDetector):
         i = len_queue-1
         feats_i = [each_scale[:,i] for each_scale in pts_feats_T]
         img_metas = [each[i] for each in img_metas_T]
+        # breakpoint()
         outs = self.pts_bbox_head(feats_i, img_metas)
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
         losses = self.pts_bbox_head.loss(*loss_inputs)

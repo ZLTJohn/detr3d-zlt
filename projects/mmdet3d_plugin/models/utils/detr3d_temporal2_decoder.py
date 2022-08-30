@@ -1,3 +1,34 @@
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from mmcv.cnn import xavier_init, constant_init
+from mmcv.cnn.bricks.registry import (ATTENTION,
+                                      TRANSFORMER_LAYER_SEQUENCE)
+from mmcv.cnn.bricks.transformer import (MultiheadAttention,
+                                         TransformerLayerSequence,
+                                         build_transformer_layer_sequence)
+from mmcv.runner.base_module import BaseModule
+
+from mmdet.models.utils.builder import TRANSFORMER
+
+def inverse_sigmoid(x, eps=1e-5):
+    """Inverse function of sigmoid.
+    Args:
+        x (Tensor): The tensor to do the
+            inverse.
+        eps (float): EPS avoid numerical
+            overflow. Defaults 1e-5.
+    Returns:
+        Tensor: The x has passed the inverse
+            function of sigmoid, has same
+            shape with input.
+    """
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1 / x2)
+
 @TRANSFORMER_LAYER_SEQUENCE.register_module()
 class Detr3DTransformerDecoder_T2(TransformerLayerSequence):
     """Implements the decoder in DETR3D transformer.
@@ -8,10 +39,18 @@ class Detr3DTransformerDecoder_T2(TransformerLayerSequence):
     """
 
     def __init__(self, *args, return_intermediate=False, **kwargs):
-        super(Detr3DTransformerDecoder, self).__init__(*args, **kwargs)
+        super(Detr3DTransformerDecoder_T2, self).__init__(*args, **kwargs)
         self.return_intermediate = return_intermediate
         self.prev={'query_output': None, 'refpt': None, 'img_metas': None}
-        self.temporal_pos_encoder = nn.Linear(3, self.embed_dims)
+        # self.temporal_pos_encoder = nn.Linear(3, self.embed_dims)
+        self.temporal_pos_encoder = nn.Sequential(
+            nn.Linear(3, self.embed_dims), 
+            nn.LayerNorm(self.embed_dims),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.embed_dims, self.embed_dims), 
+            nn.LayerNorm(self.embed_dims),
+            nn.ReLU(inplace=True),
+        )
     
     def forward(self,
                 query,
@@ -69,7 +108,7 @@ class Detr3DTransformerDecoder_T2(TransformerLayerSequence):
             if self.return_intermediate:
                 intermediate.append(output)
                 intermediate_reference_points.append(reference_points)
-
+        # breakpoint()
         self.prev['query_output']= output
         self.prev['refpt']= reference_points
         self.prev['img_metas'] = kwargs['img_metas']
@@ -97,36 +136,70 @@ class Detr3DTemporalCrossAttn(MultiheadAttention):
                 **kwargs):
         #kwargs['img_metas']
         #value = key = last frame query
-        if kwargs['prev_refpt'] == None: return query
+        # breakpoint()
+        # print('------------------',kwargs,'--------------')
+        if kwargs['prev_refpt'] == None:
+            return query
         
         refpt_prev = kwargs['prev_refpt']   #bs, numq, 3
         prev_img_metas = kwargs['prev_img_metas']   #[bs]
-        ego_prev2glob = np.asarray([each['pose'] for each in prev_img_metas]) # bs num_cam 4,4
-        glob2ego = np.linalg.inv(np.asarray(kwargs['img_metas']['pose']))
+        img_metas = kwargs['img_metas']
+        ego_prev2glob = np.asarray([each['pose'] for each in prev_img_metas]) # bs 4,4
+        glob2ego = np.linalg.inv(np.asarray([each['pose'] for each in img_metas]))
         ego_prev2ego = glob2ego @ ego_prev2glob
-        glob2ego = refpt_prev.new_tensor(glob2ego)
+        ego_prev2ego = refpt_prev.new_tensor(ego_prev2ego)
 
-        refpt_prev = torch.cat((refpt_prev, torch.ones_like(refpt_prev[..., :1])), -1)
-        refpt_prev = torch.matmul(ego_prev2ego, refpt_prev)
+        refpt_prev = torch.cat((refpt_prev, torch.ones_like(refpt_prev[..., :1])), -1)# bs numq 4
+        B, num_query = refpt_prev.size()[:2]
+        # breakpoint()
+        ego_prev2ego = ego_prev2ego.view(B, 1, 4, 4).repeat(1, num_query, 1, 1)   # B num_q 4 4
+        refpt_prev = torch.matmul(ego_prev2ego, refpt_prev.unsqueeze(-1)).squeeze(-1)
         refpt = kwargs['reference_points']
         temporal_pos_encoder = kwargs['temporal_pos_encoder']#input it in detr3d_temporal2.py
 
         value = kwargs['prev_query_output']
         key = value
-        key_pos = temporal_pos_encoder(refpt_prev[...,:3])
-        query_pos = temporal_pos_encoder(refpt)
-        return super(Detr3DTemporalCrossAttn, self).forward(
-                    query,
-                    key,
-                    value,
-                    identity if self.pre_norm else None,
-                    query_pos=query_pos,
-                    key_pos=key_pos,
-                    attn_mask=attn_masks[attn_index],
-                    key_padding_mask=key_padding_mask,
-                    **kwargs)
-       
+        key_pos = temporal_pos_encoder(refpt_prev[...,:3]).permute(1,0,2)
+        query_pos = temporal_pos_encoder(refpt).permute(1,0,2)
+        
+        # return super(Detr3DTemporalCrossAttn, self).forward(
+        #             query,
+        #             key,
+        #             value,
+        #             identity if self.pre_norm else None,
+        #             query_pos=query_pos,
+        #             key_pos=key_pos,
+        #             attn_mask=attn_masks[attn_index],
+        #             key_padding_mask=key_padding_mask,
+        #             **kwargs)
 
+        if key is None:
+            key = query
+        if value is None:
+            value = key
+        if identity is None:
+            identity = query
+        if query_pos is not None:
+            query = query + query_pos
+        if key_pos is not None:
+            key = key + key_pos
+
+        if self.batch_first:
+            query = query.transpose(0, 1)
+            key = key.transpose(0, 1)
+            value = value.transpose(0, 1)
+        out = self.attn(
+            query=query,
+            key=key,
+            value=value,
+            attn_mask=attn_mask,
+            key_padding_mask=key_padding_mask)[0]
+
+        if self.batch_first:
+            out = out.transpose(0, 1)
+        return identity + self.dropout_layer(self.proj_drop(out))
+        
+       
 #  query = self.attentions[attn_index](
 #                     query,
 #                     key,
