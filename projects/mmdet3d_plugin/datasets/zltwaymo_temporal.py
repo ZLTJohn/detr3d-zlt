@@ -96,12 +96,18 @@ class CustomWaymoDataset_T(KittiDataset):
         return pts_filename
 
     def __getitem__(self, idx):
+        if self.test_mode:
+            return self.prepare_test_data(idx)
+        # import time
+        # _ = time.time()
         while True:
-            data = self.prepare_train_data(idx)# we prepare test data as train data
+            data = self.prepare_train_data(idx)
             if data is None:
                 idx = self._rand_another(idx)
                 continue
+            # print('dataloading cost: {} ms'.format(time.time()-_))
             return data
+
     def prepare_train_data(self, index):
         #[T, T-1]
         idx_list = list(range(index-self.history_len, index+1))
@@ -118,8 +124,8 @@ class CustomWaymoDataset_T(KittiDataset):
                 self.pre_pipeline(input_dict)
                 example = self.pipeline(input_dict)
             data_queue.insert(0, copy.deepcopy(example))
-
-        if self.filter_empty_gt and \
+        # (not self.test_mode) and\
+        if self.filter_empty_gt and\
             (data_queue[-1] is None or ~(data_queue[-1]['gt_labels_3d']._data != -1).any()):
             return None
         #data_queue: T-len+1, T

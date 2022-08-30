@@ -4,7 +4,7 @@ import numpy as np
 from mmdet3d.core.points import BasePoints, get_points_type
 from mmdet.datasets.builder import PIPELINES
 from mmdet.datasets.pipelines import LoadAnnotations
-
+from PIL import Image
 @PIPELINES.register_module()
 class MyResize(object):
     """Resize images & bbox & mask.
@@ -421,7 +421,7 @@ class MyLoadMultiViewImageFromFiles(object):
     """Load multi channel images from a list of separate channel files.
 
     Expects results['img_filename'] to be a list of filenames.
-
+    note that we read image in BGR style to align with opencv.imread
     Args:
         to_float32 (bool): Whether to convert the img to float32.
             Defaults to False.
@@ -459,8 +459,12 @@ class MyLoadMultiViewImageFromFiles(object):
                 - scale_factor (float): Scale factor.
                 - img_norm_cfg (dict): Normalization configuration of images.
         """
+        # import time
+        # _=time.time()
         filename = results['img_filename']
-        img = [mmcv.imread(name, self.color_type) for name in filename]
+        # img = [mmcv.imread(name, self.color_type) for name in filename]
+        img = [np.asarray(Image.open(name))[...,::-1] for name in filename]
+        # breakpoint()
         results['ori_shape'] = [img_i.shape for img_i in img]
         if self.img_scale is not None:
             img = [self.pad(img_i) for img_i in img]
@@ -484,6 +488,7 @@ class MyLoadMultiViewImageFromFiles(object):
         # for i in range(img.shape[-1]):
         #     mmcv.imwrite(img[..., i], 'debug_image/new_loaded_{}.png'.format(i))
         # open('debug_image/new_load_results.txt','w').write(str(results)+'\n')
+        # print('read img cost: {} ms'.format(time.time()-_))
         return results
 
     def __repr__(self):
