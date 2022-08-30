@@ -40,6 +40,7 @@ class Detr3D_T(MVXTwoStageDetector):
                              train_cfg, test_cfg, pretrained)
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         self.use_grid_mask = use_grid_mask
+        self.prev = {'img_feats': None, 'img_metas':None, 'scene_id':None}
 
     def extract_img_feat(self, img, img_metas, len_queue=None):
         """Extract features of images."""
@@ -101,21 +102,9 @@ class Detr3D_T(MVXTwoStageDetector):
         Returns:
             dict: Losses of each branch.
         """
-        # print(img_metas[0])
-        # exit(0)
         outs = self.pts_bbox_head(pts_feats, img_metas, prev_img_feat, prev_img_metas)
-        # bbox_list = self.pts_bbox_head.get_bboxes(
-        #     outs, img_metas, rescale=False)
-        # import cv2
-        # for i,name in enumerate(img_metas[0]['filename']):
-        #     img = cv2.imread(name)
-        #     cv2.imwrite('debug_target/gt_vis_{}.png'.format(i),img)
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
         losses = self.pts_bbox_head.loss(*loss_inputs)
-        # print(bbox_list)
-        # print(bbox_list[0][2].size())#300
-        # print(losses)
-        # exit(0)
         return losses
 
     @force_fp32(apply_to=('img', 'points'))
@@ -178,12 +167,6 @@ class Detr3D_T(MVXTwoStageDetector):
         Returns:
             dict: Losses of different branches.
         """
-        # open('debug_forward/waymo_train_img_metas.txt','w').write(str(img_metas)+'\ninput img shape:'+str(img.shape))
-        # name = str(time.time())
-        # save_bbox2img(img, gt_bboxes_3d, img_metas, name = name)
-        # save_bbox2bev(gt_bboxes_3d, img_metas, name=name)
-        # exit(0)
-
         len_queue = img.size(1)
         prev_img = img[:, :-1, ...]
         img = img[:, -1, ...]
@@ -203,28 +186,51 @@ class Detr3D_T(MVXTwoStageDetector):
         return losses
     # test is yet to be changed
     def forward_test(self, img_metas, img=None, **kwargs):
-        # open('debug_forward/waymo_test_img_metas.txt','w').write(str(img_metas)+'\ninput img shape:'+str(img[0].shape)+'\nlen of img list'+str(len(img)))
-        # exit(0)
         for var, name in [(img_metas, 'img_metas')]:
             if not isinstance(var, list):
                 raise TypeError('{} must be a list, but got {}'.format(
                     name, type(var)))
         img = [img] if img is None else img
         return self.simple_test(img_metas[0], img[0], **kwargs)
-        # if num_augs == 1:
-        #     img = [img] if img is None else img
-        #     return self.simple_test(None, img_metas[0], img[0], **kwargs)
-        # else:
-        #     return self.aug_test(None, img_metas, img, **kwargs)
+
+    def update_prev(self, x, img_metas, Force = True):
+        scene_id = [ (each['sample_idx']//1000) for each in img_metas]
+        bs = len(img_metas)
+        if Force == True:
+            self.prev['scene_id'] = copy.deepcopy(scene_id)
+            self.prev['img_feats'] = [each.unsqueeze(1) for each in x]
+            self.prev['img_metas'] = [{0: copy.deepcopy(each)} for each in img_metas]
+        else:
+            for i in range(bs):
+                if self.prev['scene_id'][i]!=scene_id[i]:
+                    self.prev['scene_id'][i] = copy.deepcopy(scene_id[i])
+                    for lvl in range(len(x)):   self.prev['img_feats'][lvl][i] = x[lvl][i].unsqueeze(0)
+                    self.prev['img_metas'][i] = {0: copy.deepcopy(img_metas[i])}
+                else:#update lidar2img
+                    len_queue = 1
+                    glob2ego_prev = np.linalg.inv(self.prev['img_metas'][i][len_queue-1]['pose'])
+                    ego2glob = img_metas[i]['pose']
+                    # ego2img_old =ego_old2img_old @ global2ego_old @ ego2global #@pt_ego
+                    for key in range(len_queue):
+                        ego_prev2img_i = self.prev['img_metas'][i][key]['lidar2img']
+                        ego2img_i = ego_prev2img_i @ glob2ego_prev @ ego2glob#@pt_ego
+                        self.prev['img_metas'][i][key]['lidar2img'] = copy.deepcopy(ego2img_i)
 
     def simple_test_pts(self, x, img_metas, rescale=False):
-        """Test function of point cloud branch."""
-        outs = self.pts_bbox_head(x, img_metas)
+        """
+        Test function of point cloud branch.
+        x: [num_scale] * B cam CHW
+        img_metas: [B]
+        only support B=1 now
+        """
+        # outs = self.pts_bbox_head(pts_feats, img_metas, prev_img_feat, prev_img_metas)
+        self.update_prev(x, img_metas, Force = (self.prev['scene_id'] == None))
+        # breakpoint()
+        outs = self.pts_bbox_head(x, img_metas, self.prev['img_feats'], self.prev['img_metas'])
         bbox_list = self.pts_bbox_head.get_bboxes(
             outs, img_metas, rescale=rescale)
-        # print(bbox_list)
-        # print(bbox_list[0][2].size())#300
-        # exit(0)
+        self.update_prev(x, img_metas, Force = True)
+        # breakpoint()
         bbox_results = [
             bbox3d2result(bboxes, scores, labels)       # to CPU
             for bboxes, scores, labels in bbox_list     #for each in batch
@@ -234,12 +240,9 @@ class Detr3D_T(MVXTwoStageDetector):
     def simple_test(self, img_metas, img=None, rescale=False):
         """Test function without augmentaiton."""
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
-
-        bbox_list = [dict() for i in range(len(img_metas))]
+        bbox_list = [dict() for i in range(len(img_metas))] 
         bbox_pts = self.simple_test_pts(
             img_feats, img_metas, rescale=rescale)
-        # save_bbox_pred(bbox_pts, img, img_metas)
-        
         for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
             result_dict['pts_bbox'] = pts_bbox
         return bbox_list    #list of dict of pts_bbox=dict(bboxes scores labels), len()=batch size

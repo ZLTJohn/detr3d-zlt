@@ -29,7 +29,7 @@ input_modality = dict(
     use_camera=True)
 
 model = dict(
-    type='Detr3D_T',
+    type='Detr3D_T2',
     use_grid_mask=True,
     img_backbone=dict(
         type='ResNet',
@@ -55,7 +55,7 @@ model = dict(
         num_outs=4,
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
-        type='Detr3DHead_T',
+        type='Detr3DHead',
         num_query=900,
         num_classes=3,
         in_channels=256,
@@ -65,10 +65,10 @@ model = dict(
         with_box_refine=True,
         as_two_stage=False,
         transformer=dict(
-            type='Detr3DTransformer_T',
+            type='Detr3DTransformer',
             num_cams = num_views,
             decoder=dict(
-                type='Detr3DTransformerDecoder_T',
+                type='Detr3DTransformerDecoder_T2',
                 num_layers=6,
                 return_intermediate=True,
                 transformerlayers=dict(
@@ -80,15 +80,22 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCrossAtten_T',
+                            type='Detr3DTemporalCrossAttn',
+                            embed_dims=256,
+                            num_heads=8,
+                            dropout=0.1),
+                        dict(
+                            type='Detr3DCrossAtten',
                             pc_range=point_cloud_range,
                             num_cams = num_views,
-                            num_points=1,
+                            num_points=1,   
                             embed_dims=256)
                     ],
                     feedforward_channels=512,
                     ffn_dropout=0.1,
-                    operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
+                    operation_order=('self_attn', 'norm', 
+                                     'cross_attn', 'norm',
+                                     'cross_attn', 'norm',
                                      'ffn', 'norm')))),
         bbox_coder=dict(
             type='NMSFreeCoder',
@@ -168,7 +175,7 @@ test_pipeline = [
 
 data = dict(
     samples_per_gpu=1,
-    workers_per_gpu=0,
+    workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
         times=1,
@@ -176,7 +183,7 @@ data = dict(
             type=dataset_type,
             data_root=data_root,
             num_views=num_views,
-            ann_file=data_root + 'waymo_infos_train.pkl',
+            ann_file=data_root + 'waymo_infos_trainval.pkl',
             split='training',
             pipeline=train_pipeline,
             modality=input_modality,

@@ -188,7 +188,7 @@ _=time()
 # FAKE_GROUND_TRUTHS_BIN = ('/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/gt.bin')
 FAKE_GROUND_TRUTHS_BIN = ('/home/zhengliangtao/pure-detr3d/data/waymo_v131/waymo_format/gt.bin')
     # WAYMO_OPEN_DATASET_DIR + '/metrics/tools/fake_ground_truths.bin')#detr3d_resnet_waymo_ep24_
-FAKE_PREDICTIONS_BIN = ('/home/zhengliangtao/pure-detr3d/result/detr3d_waymo_fcos++_val_bbox_pred.bin')
+FAKE_PREDICTIONS_BIN = ('/home/zhengliangtao/model_zoo/depth-from-motioin/work_dirs/pretrain_pgd_mv/pretrain_pgd_mv_8gpu_0.5lr_detr3d_ImgNormCfg.bin')
     # WAYMO_OPEN_DATASET_DIR + '/metrics/tools/fake_predictions.bin')
 
 eval_dict = parse_metrics_objects_binary_files(FAKE_GROUND_TRUTHS_BIN,
