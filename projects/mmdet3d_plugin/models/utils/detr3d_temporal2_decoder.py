@@ -51,7 +51,17 @@ class Detr3DTransformerDecoder_T2(TransformerLayerSequence):
             nn.LayerNorm(self.embed_dims),
             nn.ReLU(inplace=True),
         )
-    
+
+    def check_prev_scene(self, img_metas):
+        # only support bs=1 now
+        if self.prev['img_metas'] == None: 
+            return
+        scene_id = img_metas[0]['sample_idx']//1000
+        prev_scene_id = self.prev['img_metas'][0]['sample_idx']//1000
+        if scene_id != prev_scene_id:
+            breakpoint()
+            self.prev={'query_output': None, 'refpt': None, 'img_metas': None}
+
     def forward(self,
                 query,
                 *args,
@@ -78,6 +88,7 @@ class Detr3DTransformerDecoder_T2(TransformerLayerSequence):
         output = query
         intermediate = []
         intermediate_reference_points = []
+        self.check_prev_scene(kwargs['img_metas'])
         for lid, layer in enumerate(self.layers):
             reference_points_input = reference_points
             output = layer(

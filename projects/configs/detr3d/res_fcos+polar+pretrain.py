@@ -4,15 +4,15 @@ _base_ = [
 ]
 plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
-
-dataset_type = 'CustomWaymoDataset_T'
+load_from = 'ckpts/waymo_pretrain_pgd_mv_8gpu_for_detr3d_backbone_statedict_only.pth'
+dataset_type = 'CustomWaymoDataset'
 data_root = 'data/waymo_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
-resume_from = '/home/zhenglt/pure-detr3d/work_dirs/temporal_baseline2/epoch_11.pth'
+resume_from = '/home/zhenglt/pure-detr3d/work_dirs/res_fcos+polar+pretrain/epoch_11.pth'
 # load_from='ckpts/fcos3d.pth'
 class_names = [ # 不确定sign类别是否叫sign
     'Car', 'Pedestrian', 'Cyclist'
@@ -20,16 +20,19 @@ class_names = [ # 不确定sign类别是否叫sign
 # If point cloud range is changed, the models should also change their point
 # cloud range accordingly
 point_cloud_range = [-35, -75, -2, 75, 75, 4]
+point_cloud_range_polar = [-2.10 , 0, -2, 2.10, 75, 4, 'polar_coordinates'] # θ_min, r_min, z_min, θ_max, r1_max, z_max
 voxel_size = [0.5, 0.5, 6]
 num_views = 5
-img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)    #first to_rgb(if in bgr way), then do mean, last do std
-img_scale = (640, 960)
+# img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
+img_norm_cfg = dict(mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
+# img_scale = (1280, 1920)
+img_scale = (832, 1248)
 input_modality = dict(
     use_lidar=False,
     use_camera=True)
 
 model = dict(
-    type='Detr3D_T2',
+    type='Detr3D',
     use_grid_mask=True,
     img_backbone=dict(
         type='ResNet',
@@ -37,7 +40,7 @@ model = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        # with_cp=True,
+        with_cp=True,
         norm_cfg=dict(type='BN2d', requires_grad=False),
         norm_eval=True,
         style='caffe',
@@ -68,7 +71,7 @@ model = dict(
             type='Detr3DTransformer',
             num_cams = num_views,
             decoder=dict(
-                type='Detr3DTransformerDecoder_T2',
+                type='Detr3DTransformerDecoder',
                 num_layers=6,
                 return_intermediate=True,
                 transformerlayers=dict(
@@ -80,31 +83,20 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DTemporalCrossAttn',
-                            embed_dims=256,
-                            num_heads=8,
-                            dropout=0.1),
-                        dict(
                             type='Detr3DCrossAtten',
-                            pc_range=point_cloud_range,
+                            pc_range=point_cloud_range_polar,
                             num_cams = num_views,
-                            num_points=1,   
+                            num_points=1,
                             embed_dims=256)
                     ],
                     feedforward_channels=512,
                     ffn_dropout=0.1,
-                    operation_order=('self_attn', 'norm', 
-                                     'cross_attn', 'norm',
-                                     'cross_attn', 'norm',
+                    operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
                                      'ffn', 'norm')))),
         bbox_coder=dict(
             type='NMSFreeCoder',
-            # nuscene got point_cloud_range = [-50, -50, -5, 50, 50, 3]
-            # but waymo is point_cloud_range = [-74.88, -74.88, -2, 74.88, 74.88, 4]
-            # orginal post center range is [-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
-            # post_center_range=[-74.88, -74.88, -10.0, -74.88, -74.88, 10.0],
-            post_center_range=point_cloud_range, #transfusion setting
-            pc_range=point_cloud_range,
+            post_center_range=point_cloud_range,
+            pc_range=point_cloud_range_polar,
             max_num=300,
             voxel_size=voxel_size,
             num_classes=3), 
@@ -134,13 +126,7 @@ model = dict(
             iou_cost=dict(type='IoUCost', weight=0.0), # Fake cost. This is just to make it compatible with DETR head. 
             pc_range=point_cloud_range))))
 
-meta_keys=('filename', 'ori_shape', 'img_shape', 'lidar2img',
-                   'depth2img', 'cam2img', 'pad_shape', 'scale_factor', 'flip',
-                   'pcd_horizontal_flip', 'pcd_vertical_flip', 'box_mode_3d',
-                   'box_type_3d', 'img_norm_cfg', 'pcd_trans', 'sample_idx',
-                   'pcd_scale_factor', 'pcd_rotation', 'pcd_rotation_angle',
-                   'pts_filename', 'transformation_3d_flow', 'trans_mat',
-                   'affine_aug', 'pose')
+
 train_pipeline = [
     dict(type='MyLoadMultiViewImageFromFiles', to_float32=True, img_scale=(1280, 1920)),#do paddings for ill-shape imgs
     dict(type='MyResize', img_scale=img_scale, keep_ratio=True),
@@ -152,7 +138,7 @@ train_pipeline = [
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
     dict(type='PadMultiViewImage', size_divisor=32),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
-    dict(type='Collect3D', keys=['gt_bboxes_3d', 'gt_labels_3d', 'img'], meta_keys=meta_keys)
+    dict(type='Collect3D', keys=['gt_bboxes_3d', 'gt_labels_3d', 'img'])
 ]
 test_pipeline = [
     dict(type='MyLoadMultiViewImageFromFiles', to_float32=True, img_scale=(1280, 1920)),
@@ -169,7 +155,7 @@ test_pipeline = [
                 type='DefaultFormatBundle3D',
                 class_names=class_names,
                 with_label=False),
-            dict(type='Collect3D', keys=['img'], meta_keys=meta_keys)
+            dict(type='Collect3D', keys=['img'])
         ])
 ]
 
