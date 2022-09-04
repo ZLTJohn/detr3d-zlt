@@ -56,10 +56,10 @@ class Detr3DTransformerDecoder_T2(TransformerLayerSequence):
         # only support bs=1 now
         if self.prev['img_metas'] == None: 
             return
+        # waymo only
         scene_id = img_metas[0]['sample_idx']//1000
         prev_scene_id = self.prev['img_metas'][0]['sample_idx']//1000
         if scene_id != prev_scene_id:
-            breakpoint()
             self.prev={'query_output': None, 'refpt': None, 'img_metas': None}
 
     def forward(self,
