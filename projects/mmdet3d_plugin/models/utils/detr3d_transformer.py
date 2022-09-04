@@ -149,9 +149,37 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
             `LN`.
     """
 
-    def __init__(self, *args, return_intermediate=False, **kwargs):
+    def __init__(self, *args, return_intermediate=False, use_history=False, **kwargs):
         super(Detr3DTransformerDecoder, self).__init__(*args, **kwargs)
         self.return_intermediate = return_intermediate
+        print(kwargs)
+        self.use_history = use_history   # test time aug
+        self.prev={'query_output': None, 'refpt': None, 'img_metas': None}
+
+    def check_prev_scene(self, img_metas):
+        # only support bs=1 now
+        if self.prev['img_metas'] == None: 
+            return
+        # waymo only
+        scene_id = img_metas[0]['sample_idx']//1000
+        prev_scene_id = self.prev['img_metas'][0]['sample_idx']//1000
+        if scene_id != prev_scene_id:
+            self.prev={'query_output': None, 'refpt': None, 'img_metas': None}
+        else:
+            refpt_prev = self.prev['refpt']   #bs, numq, 3
+            prev_img_metas = self.prev['img_metas']   #[bs]
+            # img_metas = img_metas
+            ego_prev2glob = np.asarray([each['pose'] for each in prev_img_metas]) # bs 4,4
+            glob2ego = np.linalg.inv(np.asarray([each['pose'] for each in img_metas]))
+            ego_prev2ego = glob2ego @ ego_prev2glob
+            ego_prev2ego = refpt_prev.new_tensor(ego_prev2ego)
+
+            refpt_prev = torch.cat((refpt_prev, torch.ones_like(refpt_prev[..., :1])), -1)# bs numq 4
+            B, num_query = refpt_prev.size()[:2]
+            # breakpoint()
+            ego_prev2ego = ego_prev2ego.view(B, 1, 4, 4).repeat(1, num_query, 1, 1)   # B num_q 4 4
+            refpt_prev = torch.matmul(ego_prev2ego, refpt_prev.unsqueeze(-1)).squeeze(-1)
+            self.prev['refpt'] = refpt_prev[...,:3]
 
     def forward(self,
                 query,
@@ -176,7 +204,12 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
                 return_intermediate is `False`, otherwise it has shape
                 [num_layers, num_query, bs, embed_dims].
         """
-        output = query
+        self.check_prev_scene(kwargs['img_metas'])
+        if (self.prev['query_output'] != None) and self.use_history:
+            output = self.prev['query_output']
+            reference_points = self.prev['refpt']
+        else:
+            output = query
         intermediate = []
         intermediate_reference_points = []
         for lid, layer in enumerate(self.layers):
@@ -192,7 +225,7 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
                 tmp = reg_branches[lid](output)
                 
                 assert reference_points.shape[-1] == 3
-
+                
                 new_reference_points = torch.zeros_like(reference_points)
                 new_reference_points[..., :2] = tmp[
                     ..., :2] + inverse_sigmoid(reference_points[..., :2])
@@ -209,6 +242,9 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
                 intermediate.append(output)
                 intermediate_reference_points.append(reference_points)
 
+        self.prev['query_output']= output
+        self.prev['refpt']= reference_points
+        self.prev['img_metas'] = kwargs['img_metas']
         if self.return_intermediate:
             return torch.stack(intermediate), torch.stack(
                 intermediate_reference_points)
