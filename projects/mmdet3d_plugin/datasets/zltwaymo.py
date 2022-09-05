@@ -156,7 +156,7 @@ class CustomWaymoDataset(KittiDataset):
         if self.modality['use_camera']:
             input_dict['img_filename'] = image_paths
             input_dict['lidar2img'] = lidar2img_rts
-
+        input_dict['pose'] = info['pose']
         if not self.test_mode:
             annos = self.get_ann_info(index)
             input_dict['ann_info'] = annos

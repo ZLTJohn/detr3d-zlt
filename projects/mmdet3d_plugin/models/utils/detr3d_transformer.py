@@ -149,11 +149,12 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
             `LN`.
     """
 
-    def __init__(self, *args, return_intermediate=False, use_history=False, **kwargs):
+    def __init__(self, *args, return_intermediate=False, use_history=False, pc_range=None, **kwargs):
         super(Detr3DTransformerDecoder, self).__init__(*args, **kwargs)
         self.return_intermediate = return_intermediate
         print(kwargs)
         self.use_history = use_history   # test time aug
+        self.pc_range = pc_range
         self.prev={'query_output': None, 'refpt': None, 'img_metas': None}
 
     def check_prev_scene(self, img_metas):
@@ -173,12 +174,17 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
             glob2ego = np.linalg.inv(np.asarray([each['pose'] for each in img_metas]))
             ego_prev2ego = glob2ego @ ego_prev2glob
             ego_prev2ego = refpt_prev.new_tensor(ego_prev2ego)
-
+            pc_range = self.pc_range
+            refpt_prev[..., 0:1] = refpt_prev[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
+            refpt_prev[..., 1:2] = refpt_prev[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
+            refpt_prev[..., 2:3] = refpt_prev[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
             refpt_prev = torch.cat((refpt_prev, torch.ones_like(refpt_prev[..., :1])), -1)# bs numq 4
             B, num_query = refpt_prev.size()[:2]
-            # breakpoint()
             ego_prev2ego = ego_prev2ego.view(B, 1, 4, 4).repeat(1, num_query, 1, 1)   # B num_q 4 4
             refpt_prev = torch.matmul(ego_prev2ego, refpt_prev.unsqueeze(-1)).squeeze(-1)
+            refpt_prev[..., 0:1] = (refpt_prev[..., 0:1] - pc_range[0])/(pc_range[3] - pc_range[0])
+            refpt_prev[..., 1:2] = (refpt_prev[..., 1:2] - pc_range[1])/(pc_range[4] - pc_range[1])
+            refpt_prev[..., 2:3] = (refpt_prev[..., 2:3] - pc_range[2])/(pc_range[5] - pc_range[2])
             self.prev['refpt'] = refpt_prev[...,:3]
 
     def forward(self,
@@ -241,10 +247,10 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
             if self.return_intermediate:
                 intermediate.append(output)
                 intermediate_reference_points.append(reference_points)
-
-        self.prev['query_output']= output
-        self.prev['refpt']= reference_points
-        self.prev['img_metas'] = kwargs['img_metas']
+        if self.use_history:
+            self.prev['query_output']= output
+            self.prev['refpt']= reference_points
+            self.prev['img_metas'] = kwargs['img_metas']
         if self.return_intermediate:
             return torch.stack(intermediate), torch.stack(
                 intermediate_reference_points)
