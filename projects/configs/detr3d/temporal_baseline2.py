@@ -12,7 +12,7 @@ data_root = 'data/waymo_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
-resume_from = '/home/zhenglt/pure-detr3d/work_dirs/temporal_baseline2/epoch_11.pth'
+# resume_from = '/home/zhenglt/pure-detr3d/work_dirs/temporal_baseline2/epoch_11.pth'
 # load_from='ckpts/fcos3d.pth'
 class_names = [ # 不确定sign类别是否叫sign
     'Car', 'Pedestrian', 'Cyclist'
@@ -81,6 +81,7 @@ model = dict(
                             dropout=0.1),
                         dict(
                             type='Detr3DTemporalCrossAttn',
+                            pc_range = point_cloud_range,
                             embed_dims=256,
                             num_heads=8,
                             dropout=0.1),
@@ -181,6 +182,7 @@ data = dict(
         times=1,
         dataset=dict(
             type=dataset_type,
+            # history_len=3, skip_len = 1,##dont use when first train
             data_root=data_root,
             num_views=num_views,
             ann_file=data_root + 'waymo_infos_train.pkl',

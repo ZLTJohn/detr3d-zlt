@@ -52,14 +52,15 @@ class Detr3DTransformerDecoder_T2(TransformerLayerSequence):
             nn.ReLU(inplace=True),
         )
 
-    def check_prev_scene(self, img_metas):
+    def check_prev_scene(self, img_metas, clear_prev):
         # only support bs=1 now
+        # breakpoint()
         if self.prev['img_metas'] == None: 
             return
         # waymo only
         scene_id = img_metas[0]['sample_idx']//1000
         prev_scene_id = self.prev['img_metas'][0]['sample_idx']//1000
-        if scene_id != prev_scene_id:
+        if (scene_id != prev_scene_id) or clear_prev == True:
             self.prev={'query_output': None, 'refpt': None, 'img_metas': None}
 
     def forward(self,
@@ -88,7 +89,7 @@ class Detr3DTransformerDecoder_T2(TransformerLayerSequence):
         output = query
         intermediate = []
         intermediate_reference_points = []
-        self.check_prev_scene(kwargs['img_metas'])
+        self.check_prev_scene(kwargs['img_metas'], kwargs['clear_prev'])
         for lid, layer in enumerate(self.layers):
             reference_points_input = reference_points
             output = layer(
@@ -131,10 +132,10 @@ class Detr3DTransformerDecoder_T2(TransformerLayerSequence):
 
 @ATTENTION.register_module()
 class Detr3DTemporalCrossAttn(MultiheadAttention):
-    def __init__(self,
+    def __init__(self, pc_range = None,
                  **kwargs):
         super(Detr3DTemporalCrossAttn, self).__init__(**kwargs)
-
+        self.pc_range = pc_range 
     def forward(self,
                 query,
                 key=None,       # key is last frame query, you should input it in transformer level
@@ -159,12 +160,19 @@ class Detr3DTemporalCrossAttn(MultiheadAttention):
         glob2ego = np.linalg.inv(np.asarray([each['pose'] for each in img_metas]))
         ego_prev2ego = glob2ego @ ego_prev2glob
         ego_prev2ego = refpt_prev.new_tensor(ego_prev2ego)
-
         refpt_prev = torch.cat((refpt_prev, torch.ones_like(refpt_prev[..., :1])), -1)# bs numq 4
         B, num_query = refpt_prev.size()[:2]
         # breakpoint()
         ego_prev2ego = ego_prev2ego.view(B, 1, 4, 4).repeat(1, num_query, 1, 1)   # B num_q 4 4
+        pc_range = self.pc_range
+        refpt_prev[..., 0:1] = refpt_prev[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
+        refpt_prev[..., 1:2] = refpt_prev[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
+        refpt_prev[..., 2:3] = refpt_prev[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
         refpt_prev = torch.matmul(ego_prev2ego, refpt_prev.unsqueeze(-1)).squeeze(-1)
+        refpt_prev[..., 0:1] = (refpt_prev[..., 0:1] - pc_range[0])/(pc_range[3] - pc_range[0])
+        refpt_prev[..., 1:2] = (refpt_prev[..., 1:2] - pc_range[1])/(pc_range[4] - pc_range[1])
+        refpt_prev[..., 2:3] = (refpt_prev[..., 2:3] - pc_range[2])/(pc_range[5] - pc_range[2])
+
         refpt = kwargs['reference_points']
         temporal_pos_encoder = kwargs['temporal_pos_encoder']#input it in detr3d_temporal2.py
 

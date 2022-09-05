@@ -90,7 +90,8 @@ class Detr3D_T2(MVXTwoStageDetector):
             for i in range(len_queue-1):
                 feats_i = [each_scale[:,i] for each_scale in pts_feats_T]
                 img_metas = [each[i] for each in img_metas_T]
-                self.pts_bbox_head(feats_i, img_metas)
+                # breakpoint()
+                self.pts_bbox_head(feats_i, img_metas, clear_prev = (i==0) )
 
         self.train()
         i = len_queue-1

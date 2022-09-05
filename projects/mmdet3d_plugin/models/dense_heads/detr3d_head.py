@@ -102,7 +102,7 @@ class Detr3DHead(DETRHead):
             for m in self.cls_branches:
                 nn.init.constant_(m[-1].bias, bias_init)
 
-    def forward(self, mlvl_feats, img_metas):
+    def forward(self, mlvl_feats, img_metas, clear_prev = False):
         """Forward function.
         Args:
             mlvl_feats (tuple[Tensor]): Features from the upstream
@@ -124,6 +124,7 @@ class Detr3DHead(DETRHead):
             query_embeds,
             reg_branches=self.reg_branches if self.with_box_refine else None,  # noqa:E501
             img_metas=img_metas,
+            clear_prev = clear_prev
         )
         hs = hs.permute(0, 2, 1, 3)#what is this
         outputs_classes = []
