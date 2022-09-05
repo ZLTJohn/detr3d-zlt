@@ -59,7 +59,7 @@ class CustomWaymoDataset_T(KittiDataset):
                  ann_file,
                  split,
                  num_views=5,
-                 history_len = 1,
+                 history_len = 1, skip_len = 0,
                  pts_prefix='velodyne',
                  pipeline=None,
                  classes=None,
@@ -84,7 +84,8 @@ class CustomWaymoDataset_T(KittiDataset):
 
         self.num_views = num_views
         assert self.num_views <= 5
-        self.history_len = 1
+        self.history_len = history_len
+        self.skip_len = skip_len
         # to load a subset, just set the load_interval in the dataset config
         self.data_infos = self.data_infos[::load_interval]
         if hasattr(self, 'flag'):
@@ -110,11 +111,12 @@ class CustomWaymoDataset_T(KittiDataset):
 
     def prepare_train_data(self, index):
         #[T, T-1]
-        idx_list = list(range(index-self.history_len, index+1))
-        idx_list.reverse()
+        idx_list = list(range(index-self.history_len, index))
+        random.shuffle(idx_list)
+        idx_list = idx_list[self.skip_len:] + [index]#skip frame
+        idx_list = sorted(idx_list, reverse=True)
         data_queue = []
         scene_id = None
-
         for i in idx_list:
             i = max(0,i)
             input_dict = self.get_data_info(i)
@@ -124,7 +126,6 @@ class CustomWaymoDataset_T(KittiDataset):
                 self.pre_pipeline(input_dict)
                 example = self.pipeline(input_dict)
             data_queue.insert(0, copy.deepcopy(example))
-        # (not self.test_mode) and\
         if self.filter_empty_gt and\
             (data_queue[-1] is None or ~(data_queue[-1]['gt_labels_3d']._data != -1).any()):
             return None
