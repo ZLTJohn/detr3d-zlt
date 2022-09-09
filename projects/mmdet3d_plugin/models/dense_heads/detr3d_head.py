@@ -102,12 +102,13 @@ class Detr3DHead(DETRHead):
             for m in self.cls_branches:
                 nn.init.constant_(m[-1].bias, bias_init)
 
-    def forward(self, mlvl_feats, img_metas, clear_prev = False):
+    def forward(self, mlvl_feats, img_metas, **kwargs ):
         """Forward function.
         Args:
             mlvl_feats (tuple[Tensor]): Features from the upstream
                 network, each is a 5D-tensor with shape
                 (B, N, C, H, W).
+            kwargs: clear_prev = False, prev_img_feat=None, prev_img_metas=None(zltjohn)
         Returns:
             all_cls_scores (Tensor): Outputs from the classification head, \
                 shape [nb_dec, bs, num_query, cls_out_channels]. Note \
@@ -124,7 +125,7 @@ class Detr3DHead(DETRHead):
             query_embeds,
             reg_branches=self.reg_branches if self.with_box_refine else None,  # noqa:E501
             img_metas=img_metas,
-            clear_prev = clear_prev
+            **kwargs
         )
         hs = hs.permute(0, 2, 1, 3)#what is this
         outputs_classes = []

@@ -102,7 +102,7 @@ class Detr3D_T(MVXTwoStageDetector):
         Returns:
             dict: Losses of each branch.
         """
-        outs = self.pts_bbox_head(pts_feats, img_metas, prev_img_feat, prev_img_metas)
+        outs = self.pts_bbox_head(pts_feats, img_metas, prev_img_feat = prev_img_feat, prev_img_metas = prev_img_metas)
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
         losses = self.pts_bbox_head.loss(*loss_inputs)
         return losses
@@ -226,7 +226,7 @@ class Detr3D_T(MVXTwoStageDetector):
         # outs = self.pts_bbox_head(pts_feats, img_metas, prev_img_feat, prev_img_metas)
         self.update_prev(x, img_metas, Force = (self.prev['scene_id'] == None))
         # breakpoint()
-        outs = self.pts_bbox_head(x, img_metas, self.prev['img_feats'], self.prev['img_metas'])
+        outs = self.pts_bbox_head(x, img_metas, prev_img_feat = self.prev['img_feats'], prev_img_metas = self.prev['img_metas'])
         bbox_list = self.pts_bbox_head.get_bboxes(
             outs, img_metas, rescale=rescale)
         self.update_prev(x, img_metas, Force = True)
