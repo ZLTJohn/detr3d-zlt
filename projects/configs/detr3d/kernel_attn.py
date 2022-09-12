@@ -7,7 +7,7 @@ plugin_dir='projects/mmdet3d_plugin/'
 
 dataset_type = 'CustomWaymoDataset'
 # data_root = 'data/waymo_v131/kitti_format/'
-data_root = '/localdata_hdd/waymo_v1.3.1_untar/kitti_format/'
+data_root = '/localdata_hdd/waymo_v1.3.1_untar/kitti_format/' 
 # data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
@@ -81,10 +81,11 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCrossAtten',
+                            type='Detr3DCrossAtten_Kernel',
                             pc_range=point_cloud_range,
                             num_cams = num_views,
-                            num_points=1,
+                            kernel_height=3,
+                            kernel_width=3,
                             embed_dims=256)
                     ],
                     feedforward_channels=512,
@@ -181,7 +182,7 @@ data = dict(
             # and box_type_3d='Depth' in sunrgbd and scannet dataset.
             box_type_3d='LiDAR',
             # load one frame every five frames
-            load_interval=1)),
+            load_interval=5)),
     val=dict(
         type=dataset_type,
         data_root=data_root,

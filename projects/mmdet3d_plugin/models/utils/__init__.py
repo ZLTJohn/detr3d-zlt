@@ -3,7 +3,11 @@ from .detr import Deformable3DDetrTransformerDecoder
 from .detr3d_transformer import Detr3DTransformer, Detr3DTransformerDecoder, Detr3DCrossAtten
 from .detr3d_transformer_temporal import  Detr3DCrossAtten_T#, Detr3DTransformer_T, Detr3DTransformerDecoder_T
 from .detr3d_temporal2_decoder import Detr3DTransformerDecoder_T2, Detr3DTemporalCrossAttn
+from .kernel_transformer import Detr3DCrossAtten_Kernel
+from .detr3d_transformer_temporal1_ver2 import Detr3DCrossAtten_T1v2
 __all__ = ['DGCNNAttn', 'Deformable3DDetrTransformerDecoder', 
            'Detr3DTransformer', 'Detr3DTransformerDecoder', 'Detr3DCrossAtten',#    'Detr3DTransformer_T', 'Detr3DTransformerDecoder_T', 
            'Detr3DCrossAtten_T',
-           'Detr3DTransformerDecoder_T2', 'Detr3DTemporalCrossAttn',]
+           'Detr3DTransformerDecoder_T2', 'Detr3DTemporalCrossAttn',
+           'Detr3DCrossAtten_Kernel',
+           'Detr3DCrossAtten_T1v2']
