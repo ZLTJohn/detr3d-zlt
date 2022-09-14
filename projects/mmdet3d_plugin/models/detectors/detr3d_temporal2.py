@@ -98,7 +98,7 @@ class Detr3D_T2(MVXTwoStageDetector):
         feats_i = [each_scale[:,i] for each_scale in pts_feats_T]
         img_metas = [each[i] for each in img_metas_T]
         # breakpoint()
-        outs = self.pts_bbox_head(feats_i, img_metas)
+        outs = self.pts_bbox_head(feats_i, img_metas,  clear_prev = False)
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
         losses = self.pts_bbox_head.loss(*loss_inputs)
         return losses

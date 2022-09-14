@@ -246,7 +246,8 @@ class Detr3DCrossAtten(BaseModule):
                  dropout=0.1,
                  norm_cfg=None,
                  init_cfg=None,
-                 batch_first=False):
+                 batch_first=False,
+                 share_pos_enc = False):
         super(Detr3DCrossAtten, self).__init__(init_cfg)
         if embed_dims % num_heads != 0:
             raise ValueError(f'embed_dims must be divisible by num_heads, '
@@ -293,6 +294,7 @@ class Detr3DCrossAtten(BaseModule):
             nn.ReLU(inplace=True),
         )
         self.batch_first = batch_first
+        self.share_pos_enc = share_pos_enc
 
         self.init_weight()
 
@@ -375,7 +377,11 @@ class Detr3DCrossAtten(BaseModule):
         
         output = self.output_proj(output)#还调整么。。。后面有ffn按理说应该够用了吧？
         # (num_query, bs, embed_dims)
-        pos_feat = self.position_encoder(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
+        if self.share_pos_enc:
+            pos_enc = kwargs['temporal_pos_encoder']
+        else:
+            pos_enc = self.position_encoder
+        pos_feat = pos_enc(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
 
         return self.dropout(output) + inp_residual + pos_feat
 

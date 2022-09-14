@@ -146,7 +146,7 @@ class Detr3DCrossAtten_T1v2(BaseModule):
                 value, reference_points, self.pc_range, kwargs['img_metas'])
         output = torch.cat((output_old, output_now), -2)
         mask = torch.cat((mask_old, mask_now), -2)
-        breakpoint()
+        # breakpoint()
         output = torch.nan_to_num(output)
         mask = torch.nan_to_num(mask)
         attention_weights = attention_weights.sigmoid() * mask
