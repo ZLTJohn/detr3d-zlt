@@ -46,6 +46,7 @@ class Detr3DCrossAtten_T1v2(BaseModule):
                  dropout=0.1,
                  norm_cfg=None,
                  init_cfg=None,
+                 offset_size = 0.05,
                  batch_first=False):
         super(Detr3DCrossAtten_T1v2, self).__init__(init_cfg)
         if embed_dims % num_heads != 0:
@@ -82,7 +83,8 @@ class Detr3DCrossAtten_T1v2(BaseModule):
         self.attention_weights = nn.Linear(embed_dims,
                                            num_cams*num_levels*num_points*2)
         self.output_proj = nn.Linear(embed_dims, embed_dims)
-
+        self.batch_first = batch_first
+        self.offset_size = offset_size
         self.position_encoder = nn.Sequential(
             nn.Linear(3, self.embed_dims), 
             nn.LayerNorm(self.embed_dims),
@@ -91,15 +93,24 @@ class Detr3DCrossAtten_T1v2(BaseModule):
             nn.LayerNorm(self.embed_dims),
             nn.ReLU(inplace=True),
         )
-        self.batch_first = batch_first
+
+        # self.num_reg_fcs=2
+        # reg_branch = []
+        # for _ in range(self.num_reg_fcs):
+        #     reg_branch.append(Linear(self.embed_dims, self.embed_dims))
+        #     reg_branch.append(nn.ReLU())
+        # reg_branch.append(Linear(self.embed_dims, 3))
+        # reg_branch = nn.Sequential(*reg_branch)#maybe for gt offset available
+        self.reg_offset = nn.Linear(embed_dims, 3)
 
         self.init_weight()
 
     def init_weight(self):
         """Default initialization for Parameters of Module."""
         constant_init(self.attention_weights, val=0., bias=0.)
-        
         xavier_init(self.output_proj, distribution='uniform', bias=0.)
+        constant_init(self.reg_offset, val=0., bias=0.)
+        # xavier_init(self.reg_offset, distribution='uniform', bias=0.)
 
     def forward(self,
                 query,
@@ -139,8 +150,10 @@ class Detr3DCrossAtten_T1v2(BaseModule):
         for i in range(len_queue):#actually len_queue=1 right now
             img_metas = [each[i] for each in prev_img_metas]
             img_feats = [each_scale[:, i] for each_scale in prev_img_feat]
+            offset = (self.reg_offset(query).sigmoid() - 0.5) * self.offset_size # [-scale/2, scale/2]
+            reference_points_old = reference_points + offset
             _, output_old, mask_old = feature_sampling(
-                img_feats, reference_points, self.pc_range, img_metas) #remember to transform lidar2img@t-1
+                img_feats, reference_points_old, self.pc_range, img_metas) #remember to transform lidar2img@t-1
 
         reference_points_3d, output_now, mask_now = feature_sampling(
                 value, reference_points, self.pc_range, kwargs['img_metas'])
