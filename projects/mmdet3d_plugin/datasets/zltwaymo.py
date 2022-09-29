@@ -84,6 +84,10 @@ class CustomWaymoDataset(KittiDataset):
         self.data_infos = self.data_infos[::load_interval]
         if hasattr(self, 'flag'):
             self.flag = self.flag[::load_interval]
+        if (load_interval==1): 
+            self.gt_bin = 'gt.bin'
+        else:
+            self.gt_bin = 'gt_subset.bin'
 
     def _get_pts_filename(self, idx):
         pts_filename = osp.join(self.root_split, self.pts_prefix,
@@ -311,7 +315,7 @@ class CustomWaymoDataset(KittiDataset):
             shutil.copy(f'{pklfile_prefix}.bin', 'work_dirs/result.bin')
             from time import time
             _ = time()
-            ap_dict = compute_waymo_let_metric(f'{waymo_root}/gt.bin', f'{pklfile_prefix}.bin')
+            ap_dict = compute_waymo_let_metric(f'{waymo_root}/{self.gt_bin}', f'{pklfile_prefix}.bin')
             print('time usage of compute_let_metric: {} s'.format(time()-_))        
             
             if eval_tmp_dir is not None:
