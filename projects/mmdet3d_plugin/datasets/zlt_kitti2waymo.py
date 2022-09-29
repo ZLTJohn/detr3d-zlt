@@ -60,7 +60,8 @@ class zlt_KITTI2Waymo(object):
         self.name2idx = {}
         for idx, result in enumerate(kitti_result_files):
             if len(result['sample_idx']) > 0:
-                self.name2idx[str(result['sample_idx'][0])] = idx#'000'+  debug oneframe use
+                sample_idx = result['sample_idx'][0]
+                self.name2idx[f'{sample_idx:07d}'] = idx#'000'+  debug oneframe use
 
         # turn on eager execution for older tensorflow versions
         if int(tf.__version__.split('.')[0]) < 2:
@@ -244,14 +245,13 @@ class zlt_KITTI2Waymo(object):
             T_k2w = info['T_k2w']
             context_name = info['context_name']
             frame_timestamp_micros = info['frame_timestamp_micros']
-
             if filename in self.name2idx:
                 kitti_result = \
                     self.kitti_result_files[self.name2idx[filename]]
                 objects = self.parse_objects(kitti_result, T_k2w, context_name,
                                              frame_timestamp_micros)
             else:
-                print(filename, 'not found.')
+                # print(filename, 'not found.')
                 objects = metrics_pb2.Objects()
 
             with open(
@@ -270,7 +270,7 @@ class zlt_KITTI2Waymo(object):
         mmcv.track_parallel_progress(func, range(len(self)), self.workers)
                                      #很有可能是parallel的问题
         # for idx in range(len(self)):
-        #     self.convert_one(idx)##too slow
+        #     self.convert_one_pkl_style(idx)##too slow
         print('\nFinished ...')
 
         t_en=time()
