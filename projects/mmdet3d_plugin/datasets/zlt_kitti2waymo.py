@@ -57,11 +57,11 @@ class zlt_KITTI2Waymo(object):
         self.waymo_results_final_path = waymo_results_final_path
         self.prefix = prefix
         self.workers = int(workers)
-        self.name2idx = {}
+        self.sample_index = []
         for idx, result in enumerate(kitti_result_files):
             if len(result['sample_idx']) > 0:
                 sample_idx = result['sample_idx'][0]
-                self.name2idx[f'{sample_idx:07d}'] = idx#'000'+  debug oneframe use
+                self.sample_index.append(f'{sample_idx:07d}')
 
         # turn on eager execution for older tensorflow versions
         if int(tf.__version__.split('.')[0]) < 2:
@@ -82,16 +82,42 @@ class zlt_KITTI2Waymo(object):
         self.get_file_names()
         self.create_folder()
         tf_info_pathname = self.waymo_tfrecord_pathnames[-1].replace('.tfrecord','.pkl')
-        self.first_time = (not osp_exists(tf_info_pathname))
+        self.first_time = (not osp_exists(join(self.waymo_tfrecords_dir, 'tf_info_all.pkl')))
         if self.first_time:
-            print('it is the first time you evaluate this dataset, we use waymo with tensorflow')
-            print('to read info in .tfrecord and save them into .pkl files. It may cause error for')
-            print('unknown reason in pytorch with tensorflow. The next time we will only read .pkl')
-            print('file, so if error occurs, just evaluate it again!')
+            print('it is the first time you evaluate this dataset split, we will collect info in tfrecords to speed up evaluations')
+            self.gather_tfrecord_info()
+        self.tf_infos = mmcv.load(join(self.waymo_tfrecords_dir, 'tf_info_all.pkl'))
         # print(self.waymo_tfrecord_pathnames)
         # print(self.name2idx)
         # print(kitti_result_files[0])
         # exit(0)
+    def gather_tfrecord_info(self):
+        tf_infos = {}
+        for file_idx in range(len(self.waymo_tfrecord_pathnames)):
+            file_pathname = self.waymo_tfrecord_pathnames[file_idx]
+            file_data = tf.data.TFRecordDataset(file_pathname, compression_type='')
+            ## return still got error here
+            for frame_num, frame_data in enumerate(file_data):
+                frame = open_dataset.Frame()
+                frame.ParseFromString(bytearray(frame_data.numpy()))
+
+                filename = f'{self.prefix}{file_idx:03d}{frame_num:03d}'
+
+                for camera in frame.context.camera_calibrations:
+                    # FRONT = 1, see dataset.proto for details
+                    if camera.name == 1:
+                        T_front_cam_to_vehicle = np.array(
+                            camera.extrinsic.transform).reshape(4, 4)
+
+                T_k2w = T_front_cam_to_vehicle @ self.T_ref_to_front_cam    # inverse(Tr_velo_to_cam)
+                context_name = frame.context.name               # file name strip
+                frame_timestamp_micros = frame.timestamp_micros     # timestamp
+
+                info = {'filename': filename, 'T_k2w': T_k2w, 'context_name': context_name,\
+                        'frame_timestamp_micros': frame_timestamp_micros}
+                tf_infos[filename] = info
+            print('done with tfrecord {}'.format(file_idx))
+        mmcv.dump(tf_infos ,join(self.waymo_tfrecords_dir, 'test.pkl'))
 
     def get_file_names(self):
         """Get file names of waymo raw data."""
@@ -136,20 +162,14 @@ class zlt_KITTI2Waymo(object):
                     Object proto.
             """
             cls = kitti_result['name'][instance_idx]
-            length = round(kitti_result['dimensions'][instance_idx, 0], 4)
-            height = round(kitti_result['dimensions'][instance_idx, 1], 4)
-            width = round(kitti_result['dimensions'][instance_idx, 2], 4)
-            x = round(kitti_result['location'][instance_idx, 0], 4)
-            y = round(kitti_result['location'][instance_idx, 1], 4)
-            z = round(kitti_result['location'][instance_idx, 2], 4)
-            rotation_y = round(kitti_result['rotation_y'][instance_idx], 4)
-            score = round(kitti_result['score'][instance_idx], 4)
-
-            # y: downwards; move box origin from bottom center (kitti) to
-            # true center (waymo)
-            y -= height / 2
-            # frame transformation: kitti -> waymo
-            x, y, z = self.transform(T_k2w, x, y, z)
+            length = kitti_result['dimensions'][instance_idx, 0]
+            height = kitti_result['dimensions'][instance_idx, 1]
+            width = kitti_result['dimensions'][instance_idx, 2]
+            x = kitti_result['location'][instance_idx, 0]
+            y = kitti_result['location'][instance_idx, 1]
+            z = kitti_result['location'][instance_idx, 2]
+            rotation_y = kitti_result['rotation_y'][instance_idx]
+            score = kitti_result['score'][instance_idx]
 
             # different conventions
             heading = -(rotation_y + np.pi / 2)
@@ -176,106 +196,48 @@ class zlt_KITTI2Waymo(object):
             o.frame_timestamp_micros = frame_timestamp_micros
 
             return o
-
+        # kitti_result['location'][instance_idx]
+        kitti_result['location'][:,1] -= kitti_result['dimensions'][:,1] / 2
+        center3d = kitti_result['location']#      num_q, 3
+        homo = np.ones([center3d.shape[0],4])
+        homo[...,:3] = center3d
+        kitti_result['location'] = np.matmul(T_k2w, homo.reshape(-1,4,1)).squeeze()[:,:3]# 4,4 | num_gt,4,1  ---> num_gt,4
         objects = metrics_pb2.Objects()
-
         for instance_idx in range(len(kitti_result['name'])):
             o = parse_one_object(instance_idx)
             objects.objects.append(o)
-
         return objects
 
-    def convert_one_tfrecord_style(self, file_idx):
-        """Convert action for single file.
 
-        Args:
-            file_idx (int): Index of the file to be converted.
-        """
-        infos = []
-        file_pathname = self.waymo_tfrecord_pathnames[file_idx]
-        file_data = tf.data.TFRecordDataset(file_pathname, compression_type='')
-        ## return still got error here
-        for frame_num, frame_data in enumerate(file_data):
-            frame = open_dataset.Frame()
-            frame.ParseFromString(bytearray(frame_data.numpy()))
+    def convert_one_pkl_style(self, i):
+        _ = time()
+        kitti_result = self.kitti_result_files[i]
+        info = self.tf_infos.get(self.sample_index[i])
+        if info == None:
+            print('{} not found'.format(self.sample_index[i]))
+            return
 
-            filename = f'{self.prefix}{file_idx:03d}{frame_num:03d}'
-
-            for camera in frame.context.camera_calibrations:
-                # FRONT = 1, see dataset.proto for details
-                if camera.name == 1:
-                    T_front_cam_to_vehicle = np.array(
-                        camera.extrinsic.transform).reshape(4, 4)
-
-            T_k2w = T_front_cam_to_vehicle @ self.T_ref_to_front_cam    # inverse(Tr_velo_to_cam)
-            context_name = frame.context.name               # file name strip
-            frame_timestamp_micros = frame.timestamp_micros     # timestamp
-
-            info = {'filename': filename, 'T_k2w': T_k2w, 'context_name': context_name,\
-                    'frame_timestamp_micros': frame_timestamp_micros}
-            infos.append(info)
-
-            if filename in self.name2idx:
-                kitti_result = \
-                    self.kitti_result_files[self.name2idx[filename]]
-                objects = self.parse_objects(kitti_result, T_k2w, context_name,
-                                             frame_timestamp_micros)
-            else:
-                # print(filename, 'not found.')
-                objects = metrics_pb2.Objects()
-
-            with open(
-                    join(self.waymo_results_save_dir, f'{filename}.bin'),
-                    'wb') as f:
-                f.write(objects.SerializeToString())
-        pkl_pathname = file_pathname.replace('.tfrecord','.pkl')
-        mmcv.dump(infos ,pkl_pathname)
-
-    def convert_one_pkl_style(self, file_idx):
-        """Convert action for single file.
-
-        Args:
-            file_idx (int): Index of the file to be converted.
-        """
-        pkl_pathname = self.waymo_tfrecord_pathnames[file_idx].replace('.tfrecord','.pkl')
-        infos = mmcv.load(pkl_pathname)
-        ## return still got error here
-        for info in infos:
-            filename = info['filename']
-            T_k2w = info['T_k2w']
-            context_name = info['context_name']
-            frame_timestamp_micros = info['frame_timestamp_micros']
-            if filename in self.name2idx:
-                kitti_result = \
-                    self.kitti_result_files[self.name2idx[filename]]
-                objects = self.parse_objects(kitti_result, T_k2w, context_name,
-                                             frame_timestamp_micros)
-            else:
-                # print(filename, 'not found.')
-                objects = metrics_pb2.Objects()
-
-            with open(
-                    join(self.waymo_results_save_dir, f'{filename}.bin'),
-                    'wb') as f:
-                f.write(objects.SerializeToString())
+        filename = info['filename']
+        T_k2w = info['T_k2w']
+        context_name = info['context_name']
+        frame_timestamp_micros = info['frame_timestamp_micros']
+        objects = self.parse_objects(kitti_result, T_k2w, context_name, #too slow here
+                                            frame_timestamp_micros)
+        open(join(self.waymo_results_save_dir, f'{filename}.bin'),'wb')\
+            .write(objects.SerializeToString())
 
     def convert(self):
         """Convert action."""
         print('Start converting ...')
         t_st=time()
-        if self.first_time:
-            func = self.convert_one_tfrecord_style
-        else: func = self.convert_one_pkl_style
-
-        mmcv.track_parallel_progress(func, range(len(self)), self.workers)
-                                     #很有可能是parallel的问题
-        # for idx in range(len(self)):
-        #     self.convert_one_pkl_style(idx)##too slow
+        # mmcv.track_parallel_progress(self.convert_one_pkl_style, range(len(self.sample_index)),self.workers)
+                                    # parallel is not applicable since threads conflicts
+        for idx in range(len(self.sample_index)):
+            self.convert_one_pkl_style(idx)
+        
         print('\nFinished ...')
-
         t_en=time()
         print('time of multi converter is {}'.format(t_en-t_st))
-
         # combine all files into one .bin
         pathnames = sorted(glob(join(self.waymo_results_save_dir, '*.bin')))
         combined = self.combine(pathnames)

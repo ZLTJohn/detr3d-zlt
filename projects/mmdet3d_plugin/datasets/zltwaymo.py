@@ -82,19 +82,22 @@ class CustomWaymoDataset(KittiDataset):
         self.num_views = num_views
         assert self.num_views <= 5
         # to load a subset, just set the load_interval in the dataset config
+        self.data_infos_full = self.data_infos
+        self.load_interval = load_interval
         self.data_infos = self.data_infos[::load_interval]
         if hasattr(self, 'flag'):
             self.flag = self.flag[::load_interval]
-        if gt_bin != None:
-            self.gt_bin = gt_bin
-        elif load_interval==1 and 'val' in ann_file: 
-            self.gt_bin = 'gt.bin'
-        elif load_interval==5 and 'val' in ann_file:
-            self.gt_bin = 'gt_subset.bin'
-        elif load_interval==20 and 'train' in ann_file:
-            self.gt_bin = 'gt_train_subset.bin'
-        else:
-            assert gt_bin == 'wrong'
+        if test_mode == True:
+            if gt_bin != None:
+                self.gt_bin = gt_bin
+            elif load_interval==1 and 'val' in ann_file: 
+                self.gt_bin = 'gt.bin'
+            elif load_interval==5 and 'val' in ann_file:
+                self.gt_bin = 'gt_subset.bin'
+            elif load_interval==20 and 'train' in ann_file:
+                self.gt_bin = 'gt_train_subset.bin'
+            else:
+                assert gt_bin == 'wrong'
     def _get_pts_filename(self, idx):
         pts_filename = osp.join(self.root_split, self.pts_prefix,
                                 f'{idx:07d}.bin')
