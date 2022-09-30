@@ -82,11 +82,11 @@ class zlt_KITTI2Waymo(object):
         self.get_file_names()
         self.create_folder()
         tf_info_pathname = self.waymo_tfrecord_pathnames[-1].replace('.tfrecord','.pkl')
-        self.first_time = (not osp_exists(join(self.waymo_tfrecords_dir, 'tf_info_all.pkl')))
+        self.first_time = (not osp_exists(join(self.waymo_tfrecords_dir, 'test.pkl')))
         if self.first_time:
             print('it is the first time you evaluate this dataset split, we will collect info in tfrecords to speed up evaluations')
             self.gather_tfrecord_info()
-        self.tf_infos = mmcv.load(join(self.waymo_tfrecords_dir, 'tf_info_all.pkl'))
+        self.tf_infos = mmcv.load(join(self.waymo_tfrecords_dir, 'test.pkl'))
         # print(self.waymo_tfrecord_pathnames)
         # print(self.name2idx)
         # print(kitti_result_files[0])
@@ -117,7 +117,7 @@ class zlt_KITTI2Waymo(object):
                         'frame_timestamp_micros': frame_timestamp_micros}
                 tf_infos[filename] = info
             print('done with tfrecord {}'.format(file_idx))
-        mmcv.dump(tf_infos ,join(self.waymo_tfrecords_dir, 'tf_info_all.pkl'))
+        mmcv.dump(tf_infos ,join(self.waymo_tfrecords_dir, 'test.pkl'))
 
     def get_file_names(self):
         """Get file names of waymo raw data."""
@@ -162,14 +162,20 @@ class zlt_KITTI2Waymo(object):
                     Object proto.
             """
             cls = kitti_result['name'][instance_idx]
-            length = kitti_result['dimensions'][instance_idx, 0]
-            height = kitti_result['dimensions'][instance_idx, 1]
-            width = kitti_result['dimensions'][instance_idx, 2]
-            x = kitti_result['location'][instance_idx, 0]
-            y = kitti_result['location'][instance_idx, 1]
-            z = kitti_result['location'][instance_idx, 2]
-            rotation_y = kitti_result['rotation_y'][instance_idx]
-            score = kitti_result['score'][instance_idx]
+            length = round(kitti_result['dimensions'][instance_idx, 0], 4)
+            height = round(kitti_result['dimensions'][instance_idx, 1], 4)
+            width = round(kitti_result['dimensions'][instance_idx, 2], 4)
+            x = round(kitti_result['location'][instance_idx, 0], 4)
+            y = round(kitti_result['location'][instance_idx, 1], 4)
+            z = round(kitti_result['location'][instance_idx, 2], 4)
+            rotation_y = round(kitti_result['rotation_y'][instance_idx], 4)
+            score = round(kitti_result['score'][instance_idx], 4)
+
+            # y: downwards; move box origin from bottom center (kitti) to
+            # true center (waymo)
+            y -= height / 2
+            # frame transformation: kitti -> waymo
+            x, y, z = self.transform(T_k2w, x, y, z)
 
             # different conventions
             heading = -(rotation_y + np.pi / 2)
@@ -194,23 +200,24 @@ class zlt_KITTI2Waymo(object):
 
             o.context_name = context_name
             o.frame_timestamp_micros = frame_timestamp_micros
-
             return o
+
         # kitti_result['location'][instance_idx]
-        kitti_result['location'][:,1] -= kitti_result['dimensions'][:,1] / 2
+        objects = metrics_pb2.Objects()
         center3d = kitti_result['location']#      num_q, 3
         homo = np.ones([center3d.shape[0],4])
         homo[...,:3] = center3d
-        kitti_result['location'] = np.matmul(T_k2w, homo.reshape(-1,4,1)).squeeze()[:,:3]# 4,4 | num_gt,4,1  ---> num_gt,4
-        objects = metrics_pb2.Objects()
+        center3d = np.matmul(T_k2w, homo.reshape(-1,4,1)).squeeze()# 1,5,4,4 | num_gt,1,4,1  ---> num_gt,5, 4, 1
+        kitti_result['location'] = center3d
+        breakpoint()
         for instance_idx in range(len(kitti_result['name'])):
             o = parse_one_object(instance_idx)
             objects.objects.append(o)
+
         return objects
 
 
     def convert_one_pkl_style(self, i):
-        _ = time()
         kitti_result = self.kitti_result_files[i]
         info = self.tf_infos.get(self.sample_index[i])
         if info == None:
@@ -231,10 +238,9 @@ class zlt_KITTI2Waymo(object):
         print('Start converting ...')
         t_st=time()
         # mmcv.track_parallel_progress(self.convert_one_pkl_style, range(len(self.sample_index)),self.workers)
-                                    # parallel is not applicable since threads conflicts
+                                     #很有可能是parallel的问题
         for idx in range(len(self.sample_index)):
-            self.convert_one_pkl_style(idx)
-        
+            self.convert_one_pkl_style(idx)##too slow
         print('\nFinished ...')
         t_en=time()
         print('time of multi converter is {}'.format(t_en-t_st))
