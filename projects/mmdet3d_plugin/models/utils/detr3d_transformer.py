@@ -1,4 +1,4 @@
-
+import time
 import numpy as np
 import torch
 import torch.nn as nn
@@ -46,6 +46,7 @@ class Detr3DTransformer(BaseModule):
 
     def __init__(self,
                  num_feature_levels=4,
+                 selected_feature_level=0,
                  num_cams=6,
                  two_stage_num_proposals=300,
                  decoder=None,
@@ -55,6 +56,8 @@ class Detr3DTransformer(BaseModule):
         self.embed_dims = self.decoder.embed_dims
         self.num_feature_levels = num_feature_levels
         self.num_cams = num_cams
+        self.selected_feature_level = selected_feature_level
+        print("self.selected_feature_level:",self.selected_feature_level)
         self.two_stage_num_proposals = two_stage_num_proposals
         self.init_layers()
 
@@ -115,7 +118,11 @@ class Detr3DTransformer(BaseModule):
                     be returned when `as_two_stage` is True, \
                     otherwise None.
         """
+        # _=time.time()
         assert query_embed is not None
+        if self.num_feature_levels==1:
+            # breakpoint()
+            mlvl_feats = [mlvl_feats[self.selected_feature_level]]
         bs = mlvl_feats[0].size(0)      #(B, N, C, H, W).
         query_pos, query = torch.split(query_embed, self.embed_dims , dim=1)#所以positional encoding和query embedding是一样长的 ##[num_query, 2c]
         query_pos = query_pos.unsqueeze(0).expand(bs, -1, -1)#  复制扩充成[batch_size,num_query,c]
@@ -123,7 +130,8 @@ class Detr3DTransformer(BaseModule):
         reference_points = self.reference_points(query_pos)     #从positional encoding 里推出ref point
         reference_points = reference_points.sigmoid()           #归一化
         init_reference_out = reference_points
-
+        # __ = time.time()
+        # print('  '*4+'preparation in transformer ',__-_,'ms')
         # decoder
         query = query.permute(1, 0, 2)
         query_pos = query_pos.permute(1, 0, 2)
@@ -136,6 +144,7 @@ class Detr3DTransformer(BaseModule):
             reg_branches=reg_branches,
             **kwargs)
 
+        # print('  '*4+'decoder:',time.time()-__,'ms')
         inter_references_out = inter_references
         return inter_states, init_reference_out, inter_references_out
 
@@ -180,6 +189,7 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
         intermediate = []
         intermediate_reference_points = []
         for lid, layer in enumerate(self.layers):
+            # _ = time.time()
             reference_points_input = reference_points
             output = layer(
                 output,
@@ -187,7 +197,8 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
                 reference_points=reference_points_input,
                 **kwargs)
             output = output.permute(1, 0, 2)
-
+            # __ = time.time()
+            # print('  '*5+'decoder layer {}:'.format(lid),__-_,'ms')
             if reg_branches is not None:
                 tmp = reg_branches[lid](output)
                 
@@ -205,6 +216,7 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
             # pts = load_pts(kwargs['img_metas'])
             # save_bev(pts, new_reference_points,'debug_refpoint_bev', kwargs['img_metas'][0]['pts_filename'].split('/')[-1]+'_layer{}'.format(lid))
             output = output.permute(1, 0, 2)
+            # print('  '*5+'layer post process:',time.time()-__,'ms')
             if self.return_intermediate:
                 intermediate.append(output)
                 intermediate_reference_points.append(reference_points)
@@ -246,8 +258,7 @@ class Detr3DCrossAtten(BaseModule):
                  dropout=0.1,
                  norm_cfg=None,
                  init_cfg=None,
-                 batch_first=False,
-                 share_pos_enc = False):
+                 batch_first=False):
         super(Detr3DCrossAtten, self).__init__(init_cfg)
         if embed_dims % num_heads != 0:
             raise ValueError(f'embed_dims must be divisible by num_heads, '
@@ -294,7 +305,6 @@ class Detr3DCrossAtten(BaseModule):
             nn.ReLU(inplace=True),
         )
         self.batch_first = batch_first
-        self.share_pos_enc = share_pos_enc
 
         self.init_weight()
 
@@ -346,7 +356,7 @@ class Detr3DCrossAtten(BaseModule):
         Returns:
              Tensor: forwarded results with shape [num_query, bs, embed_dims].
         """
-
+        # _0 = time.time()
         if key is None:
             key = query
         if value is None:
@@ -364,12 +374,13 @@ class Detr3DCrossAtten(BaseModule):
 
         attention_weights = self.attention_weights(query).view(
             bs, 1, num_query, self.num_cams, self.num_points, self.num_levels)
-        
+        # _1 = time.time()
         reference_points_3d, output, mask = feature_sampling(
             value, reference_points, self.pc_range, kwargs['img_metas'])
+        # __ = time.time()
+        # print('  '*6+'feature_sampling ',__-_1,'ms')
         output = torch.nan_to_num(output)
         mask = torch.nan_to_num(mask)
-
         attention_weights = attention_weights.sigmoid() * mask
         output = output * attention_weights
         output = output.sum(-1).sum(-1).sum(-1)
@@ -377,12 +388,8 @@ class Detr3DCrossAtten(BaseModule):
         
         output = self.output_proj(output)#还调整么。。。后面有ffn按理说应该够用了吧？
         # (num_query, bs, embed_dims)
-        if self.share_pos_enc:
-            pos_enc = kwargs['temporal_pos_encoder']
-        else:
-            pos_enc = self.position_encoder
-        pos_feat = pos_enc(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
-
+        pos_feat = self.position_encoder(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
+        # print('  '*6+'rest in attn:',time.time()-_0,'ms')
         return self.dropout(output) + inp_residual + pos_feat
 
 
