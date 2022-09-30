@@ -49,7 +49,7 @@ class Detr3DHead(DETRHead):
         
         self.bbox_coder = build_bbox_coder(bbox_coder)
         self.pc_range = self.bbox_coder.pc_range
-        print('DETR3D HEAD pc_range: {}'.format(self.pc_range))
+        # print('DETR3D HEAD pc_range: {}'.format(self.pc_range))
         self.num_cls_fcs = num_cls_fcs - 1  #？？？这不就没用了么...
         super(Detr3DHead, self).__init__(
             *args, transformer=transformer, **kwargs)
@@ -119,7 +119,8 @@ class Detr3DHead(DETRHead):
         """         ###为什么是theta，不是costheta sintheta么？？
 
         query_embeds = self.query_embedding.weight
-        
+        # import time
+        # _=time.time()
         hs, init_reference, inter_references = self.transformer(
             mlvl_feats,
             query_embeds,
@@ -127,6 +128,8 @@ class Detr3DHead(DETRHead):
             img_metas=img_metas,
             **kwargs
         )
+        # __ = time.time()
+        # print('  '*3+'transformer: ',__-_,'ms')
         hs = hs.permute(0, 2, 1, 3)#what is this
         outputs_classes = []
         outputs_coords = []
@@ -162,6 +165,7 @@ class Detr3DHead(DETRHead):
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
 
+        # print('  '*3+'head: restrore outputs:',time.time()-__,'ms')
         outputs_classes = torch.stack(outputs_classes)
         outputs_coords = torch.stack(outputs_coords)
         outs = {

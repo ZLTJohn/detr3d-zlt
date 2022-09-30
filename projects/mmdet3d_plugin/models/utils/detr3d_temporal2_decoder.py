@@ -217,8 +217,6 @@ class Detr3DTemporalCrossAttn(MultiheadAttention):
         if self.batch_first:
             out = out.transpose(0, 1)
         return identity + self.dropout_layer(self.proj_drop(out))
-        
-       
 #  query = self.attentions[attn_index](
 #                     query,
 #                     key,

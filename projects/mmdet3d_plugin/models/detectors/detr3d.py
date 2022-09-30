@@ -167,11 +167,15 @@ class Detr3D(MVXTwoStageDetector):
         # save_bbox2img(img, gt_bboxes_3d, img_metas, name = name)
         # save_bbox2bev(gt_bboxes_3d, img_metas, name=name)
         # exit(0)
+        # _ = time.time()
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
+        # __ = time.time()
+        # print('  '*2+'extract_feat: ',__-_,'ms')
         losses = dict()
         losses_pts = self.forward_pts_train(img_feats, gt_bboxes_3d,
                                             gt_labels_3d, img_metas,
                                             gt_bboxes_ignore)
+        # print('  '*2+'forward_pts_train: ',time.time()-__,'ms')
         losses.update(losses_pts)
         return losses
     

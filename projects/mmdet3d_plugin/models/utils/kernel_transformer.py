@@ -179,7 +179,7 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas, k_h ,k_w
         reference_points_cam[..., 1] /= img_metas[0]['ori_shape'][0][0]
         mask[:, 3:5, :] &= (reference_points_cam[:, 3:5, :, 1:2] < 0.7)
 
-    reference_points_cam = (reference_points_cam - 0.5) * 2     #0~1 to -1~1
+    reference_points_cam = (reference_points_cam - 0.5) * 2     #0~1 to -1~1   
     mask = (mask & (reference_points_cam[..., 0:1] > -1.0)  #we should change the criteria for waymo cam 3~4
                  & (reference_points_cam[..., 0:1] < 1.0)   # which is -1~0.4
                  & (reference_points_cam[..., 1:2] > -1.0) 
@@ -194,15 +194,15 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas, k_h ,k_w
         B, N, C, H, W = feat.size()
         feat = feat.view(B*N, C, H, W)
         ref_pt =  reference_points_cam.view(B*N, num_query, 1, 2)
-        ref_pt =  ref_pt.repeat(1, 1, k_h*k_w ,1)         #[bn q kh*kw 2]
+        ref_pt =  ref_pt.repeat(1, 1, 3*3 ,1)         #[bn q kh*kw 2]
 
-        kernel_offset = generate_grid(k_h, k_w, 2.0/H, 2.0/W)  # scale: 0~H,0~W -> -1~1, -1~1
-        ref_pt_offset = kernel_offset.view(1, 1, k_h*k_w, 2)
+        kernel_offset = generate_grid(3, 3, 2.0/H, 2.0/W)  # scale: 0~H,0~W -> -1~1, -1~1
+        ref_pt_offset = kernel_offset.view(1, 1, 3*3, 2)
         ref_pt_offset = ref_pt_offset.repeat(B*num_cam, num_query, 1, 1)     #[bn q kh*kw 2]
         ref_pt_kernel = ref_pt + ref_pt_offset
         sampled_feat = F.grid_sample(feat, ref_pt_kernel)
 
-        sampled_feat = sampled_feat.view(B, N, C, num_query, k_h*k_w).permute(0, 2, 3, 1, 4)
+        sampled_feat = sampled_feat.view(B, N, C, num_query, 3*3).permute(0, 2, 3, 1, 4).mean(-1,keepdim=True)
         sampled_feats.append(sampled_feat)
     sampled_feats = torch.stack(sampled_feats, -1)
     sampled_feats = sampled_feats.view(B, C, num_query, num_cam,  k_h*k_w, len(mlvl_feats))

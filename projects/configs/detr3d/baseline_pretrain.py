@@ -231,5 +231,5 @@ lr_config = dict(
     min_lr_ratio=1e-3)
 total_epochs = 24
 evaluation = dict(_delete_=True, interval=24)
-
+checkpoint_config = dict(interval=4, max_keep_ckpts=24)
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)

@@ -6,8 +6,8 @@ plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 
 dataset_type = 'CustomWaymoDataset_T'
-data_root = 'data/waymo_v131/kitti_format/'
-# data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
+# data_root = 'data/waymo_v131/kitti_format/'
+data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
@@ -182,7 +182,7 @@ data = dict(
         times=1,
         dataset=dict(
             type=dataset_type,
-            # history_len=3, skip_len = 1,##dont use when first train
+            history_len=3, skip_len = 1,##dont use when first train
             data_root=data_root,
             num_views=num_views,
             ann_file=data_root + 'waymo_infos_train.pkl',

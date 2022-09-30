@@ -1,11 +1,13 @@
-
 import numpy as np
 import torch
 import torch.nn as nn
+from torch import Tensor
+import math
 import torch.nn.functional as F
 from mmcv.cnn import xavier_init, constant_init
 from mmcv.cnn.bricks.registry import (ATTENTION,
-                                      TRANSFORMER_LAYER_SEQUENCE)
+                                      TRANSFORMER_LAYER_SEQUENCE,
+                                      )
 from mmcv.cnn.bricks.transformer import (MultiScaleDeformableAttention,
                                          TransformerLayerSequence,
                                          build_transformer_layer_sequence)
@@ -15,26 +17,31 @@ from mmdet.models.utils.builder import TRANSFORMER
 from projects.mmdet3d_plugin.models.utils.detr3d_transformer import feature_sampling, inverse_sigmoid
 # def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
 # def inverse_sigmoid(x, eps=1e-5):
+@ATTENTION.register_module()
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: Tensor, start_pos=0) -> Tensor:
+        """
+        Args:
+            x: Tensor, shape [seq_len, batch_size, embedding_dim]
+        """
+        x = x + self.pe[start_pos:start_pos+x.size(0)]
+        return x
+        # return self.dropout(x)
 
 @ATTENTION.register_module()
-class Detr3DCrossAtten_T(BaseModule):
-    """An attention module used in Detr3d. 
-    Args:
-        embed_dims (int): The embedding dimension of Attention.
-            Default: 256.
-        num_heads (int): Parallel attention heads. Default: 64.
-        num_levels (int): The number of feature map used in
-            Attention. Default: 4.
-        num_points (int): The number of sampling points for
-            each query in each head. Default: 4.
-        im2col_step (int): The step used in image_to_column.
-            Default: 64.
-        dropout (float): A Dropout layer on `inp_residual`.
-            Default: 0..
-        init_cfg (obj:`mmcv.ConfigDict`): The Config for initialization.
-            Default: None.
-    """
-
+class Detr3DCrossAtten_T1v1_1(BaseModule):
     def __init__(self,
                  embed_dims=256,
                  num_heads=8,
@@ -47,31 +54,13 @@ class Detr3DCrossAtten_T(BaseModule):
                  norm_cfg=None,
                  init_cfg=None,
                  batch_first=False):
-        super(Detr3DCrossAtten_T, self).__init__(init_cfg)
-        if embed_dims % num_heads != 0:
-            raise ValueError(f'embed_dims must be divisible by num_heads, '
-                             f'but got {embed_dims} and {num_heads}')
+        super(Detr3DCrossAtten_T1v1_1, self).__init__(init_cfg)
+
         dim_per_head = embed_dims // num_heads
         self.norm_cfg = norm_cfg
         self.init_cfg = init_cfg
         self.dropout = nn.Dropout(dropout)
         self.pc_range = pc_range
-        # print('DETR3D CrossAttn pc_range: {}'.format(pc_range))
-        # you'd better set dim_per_head to a power of 2
-        # which is more efficient in the CUDA implementation
-        def _is_power_of_2(n):
-            if (not isinstance(n, int)) or (n < 0):
-                raise ValueError(
-                    'invalid input for _is_power_of_2: {} (type: {})'.format(
-                        n, type(n)))
-            return (n & (n - 1) == 0) and n != 0
-
-        if not _is_power_of_2(dim_per_head):
-            warnings.warn(
-                "You'd better set embed_dims in "
-                'MultiScaleDeformAttention to make '
-                'the dimension of each attention head a power of 2 '
-                'which is more efficient in our CUDA implementation.')
 
         self.im2col_step = im2col_step
         self.embed_dims = embed_dims
@@ -82,10 +71,6 @@ class Detr3DCrossAtten_T(BaseModule):
         self.attention_weights = nn.Linear(embed_dims,
                                            num_cams*num_levels*num_points)
         self.output_proj = nn.Linear(embed_dims, embed_dims)
-      
-        self.history_attention_weights = nn.Linear(embed_dims,
-                                           num_cams*num_levels*num_points)
-        self.temporal_fusion_layer = nn.Linear(2*embed_dims, embed_dims)
 
         self.position_encoder = nn.Sequential(
             nn.Linear(3, self.embed_dims), 
@@ -96,16 +81,15 @@ class Detr3DCrossAtten_T(BaseModule):
             nn.ReLU(inplace=True),
         )
         self.batch_first = batch_first
+        self.temp_encoder = PositionalEncoding(embed_dims)
 
         self.init_weight()
 
     def init_weight(self):
         """Default initialization for Parameters of Module."""
         constant_init(self.attention_weights, val=0., bias=0.)
-        constant_init(self.history_attention_weights, val=0., bias=0.)
         
         xavier_init(self.output_proj, distribution='uniform', bias=0.)
-        xavier_init(self.temporal_fusion_layer, distribution='uniform', bias=0.)
 
     def forward(self,
                 query,
@@ -136,37 +120,34 @@ class Detr3DCrossAtten_T(BaseModule):
         prev_img_metas = kwargs['prev_img_metas']
         len_queue = prev_img_feat[0].shape[1]
         output_history = []
+
+        bs, num_query, _ = query.size()
+        query_old = self.temp_encoder(query,1)    # seq_len bs emb_dims
+        query_now = self.temp_encoder(query,0)
+        attention_weights_old = self.attention_weights(query_old).view(
+            bs, 1, num_query, self.num_cams, self.num_points, self.num_levels)
         for i in range(len_queue):#actually len_queue=1 right now
             img_metas = [each[i] for each in prev_img_metas]
             img_feats = [each_scale[:, i] for each_scale in prev_img_feat]
-            output_history = self.get_weight_feat(img_feats, query, reference_points, self.history_attention_weights, img_metas)
-            
-        reference_points_3d, output_now = self.get_weight_feat(value, query, reference_points, self.attention_weights,\
-                                          kwargs['img_metas'], return_ref_3d = True)
-        # breakpoint()
-        output = torch.cat((output_history, output_now), -1)
-        output = self.temporal_fusion_layer(output)
-        
-        pos_feat = self.position_encoder(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
-        return self.dropout(output) + inp_residual + pos_feat
+            _, output_old, mask_old = feature_sampling(
+                img_feats, reference_points, self.pc_range, img_metas) #remember to transform lidar2img@t-1
 
-    def get_weight_feat(self, value, query, reference_points, attn_weight_layer, img_metas, return_ref_3d=False,):
-        bs, num_query, _ = query.size()
-        attention_weights = attn_weight_layer(query).view(
+        attention_weights = self.attention_weights(query_now).view(
             bs, 1, num_query, self.num_cams, self.num_points, self.num_levels)
-        reference_points_3d, output, mask = feature_sampling(
-            value, reference_points, self.pc_range, img_metas) #remember to transform lidar2img@t-1
+        reference_points_3d, output_now, mask_now = feature_sampling(
+                value, reference_points, self.pc_range, kwargs['img_metas'])
+
+        output = torch.cat((output_old, output_now), -2)
+        mask = torch.cat((mask_old, mask_now), -2)
+        attention_weights = torch.cat((attention_weights_old, attention_weights), -2)
         output = torch.nan_to_num(output)
         mask = torch.nan_to_num(mask)
-
         attention_weights = attention_weights.sigmoid() * mask
         output = output * attention_weights
         output = output.sum(-1).sum(-1).sum(-1)
         output = output.permute(2, 0, 1)
 
         output = self.output_proj(output)#还调整么。。。后面有ffn按理说应该够用了吧？
-        # (num_query, bs, embed_dims)
-        if return_ref_3d==True:
-            return reference_points_3d, output
-        return output
-
+        
+        pos_feat = self.position_encoder(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
+        return self.dropout(output) + inp_residual + pos_feat
