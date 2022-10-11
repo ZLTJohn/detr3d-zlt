@@ -12,12 +12,34 @@ from mmcv.cnn.bricks.transformer import (MultiScaleDeformableAttention,
 from mmcv.runner.base_module import BaseModule
 
 from mmdet.models.utils.builder import TRANSFORMER
-from projects.mmdet3d_plugin.models.utils.detr3d_transformer import feature_sampling, inverse_sigmoid
+from projects.mmdet3d_plugin.models.utils.detr3d_transformer import feature_sampling, inverse_sigmoid, Detr3DTransformer
 # def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
 # def inverse_sigmoid(x, eps=1e-5):
 
+@TRANSFORMER.register_module()
+class Detr3DTransformer_T1v3(Detr3DTransformer):
+    def init_layers(self):
+        super().init_layers()
+        self.emb_prev = nn.Embedding(1, self.embed_dims)
+        self.emb_now = nn.Embedding(1,self.embed_dims)
+
+    def forward(self,
+                mlvl_feats,
+                query_embed,
+                reg_branches=None,
+                **kwargs):
+
+        return super().forward(
+                mlvl_feats,
+                query_embed,
+                reg_branches=None,
+                emb_prev = self.emb_prev, 
+                emb_now = self.emb_now, 
+                **kwargs)
+    
+
 @ATTENTION.register_module()
-class Detr3DCrossAtten_T(BaseModule):
+class Detr3DCrossAtten_T1v3(BaseModule):
     """An attention module used in Detr3d. 
     Args:
         embed_dims (int): The embedding dimension of Attention.
@@ -47,7 +69,7 @@ class Detr3DCrossAtten_T(BaseModule):
                  norm_cfg=None,
                  init_cfg=None,
                  batch_first=False):
-        super(Detr3DCrossAtten_T, self).__init__(init_cfg)
+        super(Detr3DCrossAtten_T1v3, self).__init__(init_cfg)
         if embed_dims % num_heads != 0:
             raise ValueError(f'embed_dims must be divisible by num_heads, '
                              f'but got {embed_dims} and {num_heads}')
@@ -83,8 +105,8 @@ class Detr3DCrossAtten_T(BaseModule):
                                            num_cams*num_levels*num_points)
         self.output_proj = nn.Linear(embed_dims, embed_dims)
       
-        # self.history_attention_weights = nn.Linear(embed_dims,
-        #                                    num_cams*num_levels*num_points)
+        self.history_attention_weights = nn.Linear(embed_dims,
+                                           num_cams*num_levels*num_points)
         self.temporal_fusion_layer = nn.Linear(2*embed_dims, embed_dims)
 
         self.position_encoder = nn.Sequential(
@@ -102,7 +124,7 @@ class Detr3DCrossAtten_T(BaseModule):
     def init_weight(self):
         """Default initialization for Parameters of Module."""
         constant_init(self.attention_weights, val=0., bias=0.)
-        # constant_init(self.history_attention_weights, val=0., bias=0.)
+        constant_init(self.history_attention_weights, val=0., bias=0.)
         
         xavier_init(self.output_proj, distribution='uniform', bias=0.)
         xavier_init(self.temporal_fusion_layer, distribution='uniform', bias=0.)
@@ -136,18 +158,20 @@ class Detr3DCrossAtten_T(BaseModule):
         prev_img_metas = kwargs['prev_img_metas']
         len_queue = prev_img_feat[0].shape[1]
         output_history = []
+        
         for i in range(len_queue):#actually len_queue=1 right now
             img_metas = [each[i] for each in prev_img_metas]
             img_feats = [each_scale[:, i] for each_scale in prev_img_feat]
-            # output_history = self.get_weight_feat(img_feats, query, reference_points, self.history_attention_weights, img_metas)
-            
+            output_history = self.get_weight_feat(img_feats, query, reference_points, self.history_attention_weights, img_metas)
+            output_history = output_history + kwargs['emb_prev'].weight
+
         reference_points_3d, output_now = self.get_weight_feat(value, query, reference_points, self.attention_weights,\
                                           kwargs['img_metas'], return_ref_3d = True)
+        output_now = output_now + kwargs['emb_now'].weight
         # breakpoint()
-        # output = torch.cat((output_history, output_now), -1)
-        _ = output_now.detach()
-        output = torch.cat((output_now, _), -1)
+        output = torch.cat((output_history, output_now), -1)
         output = self.temporal_fusion_layer(output)
+        
         pos_feat = self.position_encoder(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
         return self.dropout(output) + inp_residual + pos_feat
 

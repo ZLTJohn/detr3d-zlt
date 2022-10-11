@@ -4,13 +4,13 @@ import time
 import torchvision.utils as vutils
 import torch
 import copy
-
+import os
 from mmcv.runner import force_fp32, auto_fp16
 from mmdet.models import DETECTORS
 from mmdet3d.core import bbox3d2result
 from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from projects.mmdet3d_plugin.models.utils.grid_mask import GridMask
-
+from .visualizer_zlt import *
 
 @DETECTORS.register_module()
 class Detr3D_T(MVXTwoStageDetector):
@@ -31,7 +31,9 @@ class Detr3D_T(MVXTwoStageDetector):
                  img_rpn_head=None,
                  train_cfg=None,
                  test_cfg=None,
-                 pretrained=None):
+                 pretrained=None,
+                 debug_name=None,
+                 vis_count=30):
         super(Detr3D_T,
               self).__init__(pts_voxel_layer, pts_voxel_encoder,
                              pts_middle_encoder, pts_fusion_layer,
@@ -41,6 +43,8 @@ class Detr3D_T(MVXTwoStageDetector):
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         self.use_grid_mask = use_grid_mask
         self.prev = {'img_feats': None, 'img_metas':None, 'scene_id':None}
+        self.debug_name = debug_name
+        self.vis_count = 30
 
     def extract_img_feat(self, img, img_metas, len_queue=None):
         """Extract features of images."""
@@ -229,7 +233,6 @@ class Detr3D_T(MVXTwoStageDetector):
         outs = self.pts_bbox_head(x, img_metas, prev_img_feat = self.prev['img_feats'], prev_img_metas = self.prev['img_metas'])
         bbox_list = self.pts_bbox_head.get_bboxes(
             outs, img_metas, rescale=rescale)
-        self.update_prev(x, img_metas, Force = True)
         # breakpoint()
         bbox_results = [
             bbox3d2result(bboxes, scores, labels)       # to CPU
@@ -243,6 +246,25 @@ class Detr3D_T(MVXTwoStageDetector):
         bbox_list = [dict() for i in range(len(img_metas))] 
         bbox_pts = self.simple_test_pts(
             img_feats, img_metas, rescale=rescale)
+
+        if self.debug_name != None:
+            # name = str(time.time())
+            # breakpoint()
+            dir = 'debug/visualization/'
+            name = str(img_metas[0]['sample_idx'])
+            if os.path.exists(dir + name) == False:
+                os.mkdir(dir + name)
+            save_bbox_pred(bbox_pts, img, img_metas,
+                self.debug_name,
+                dir_name = dir + name, 
+                vis_count = self.vis_count)
+                
+            save_bbox_pred(bbox_pts, img, [self.prev['img_metas'][0][0]],
+                self.debug_name+'_prev', 
+                dir_name = dir + name, 
+                vis_count = self.vis_count)
+        
         for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
             result_dict['pts_bbox'] = pts_bbox
+        self.update_prev(img_feats, img_metas, Force = True)
         return bbox_list    #list of dict of pts_bbox=dict(bboxes scores labels), len()=batch size
