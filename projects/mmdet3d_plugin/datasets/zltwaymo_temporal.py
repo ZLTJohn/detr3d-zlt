@@ -16,7 +16,7 @@ import random
 
 from mmdet3d.core.bbox import (Box3DMode, CameraInstance3DBoxes, Coord3DMode,
                          LiDARInstance3DBoxes, points_cam2img)
-from .zltvis import save_temporal_frame
+from .zltvis_temporal import save_temporal_frame
 from .zltwaymo import CustomWaymoDataset
 @DATASETS.register_module()
 class CustomWaymoDataset_T(CustomWaymoDataset):

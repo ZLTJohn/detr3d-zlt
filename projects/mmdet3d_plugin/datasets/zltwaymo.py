@@ -87,17 +87,14 @@ class CustomWaymoDataset(KittiDataset):
         self.data_infos = self.data_infos[::load_interval]
         if hasattr(self, 'flag'):
             self.flag = self.flag[::load_interval]
-        if test_mode == True:
-            if gt_bin != None:
-                self.gt_bin = gt_bin
-            elif load_interval==1 and 'val' in ann_file: 
-                self.gt_bin = 'gt.bin'
-            elif load_interval==5 and 'val' in ann_file:
-                self.gt_bin = 'gt_subset.bin'
-            elif load_interval==20 and 'train' in ann_file:
-                self.gt_bin = 'gt_train_subset.bin'
-            else:
-                assert gt_bin == 'wrong'
+        if gt_bin != None:
+            self.gt_bin = gt_bin
+        elif load_interval==5 and 'val' in ann_file:
+            self.gt_bin = 'gt_subset.bin'
+        elif load_interval==20 and 'train' in ann_file:
+            self.gt_bin = 'gt_train_subset.bin'
+        else:
+            self.gt_bin = 'gt.bin'
     def _get_pts_filename(self, idx):
         pts_filename = osp.join(self.root_split, self.pts_prefix,
                                 f'{idx:07d}.bin')
@@ -173,7 +170,7 @@ class CustomWaymoDataset(KittiDataset):
         if not self.test_mode:
             annos = self.get_ann_info(index)
             input_dict['ann_info'] = annos
-
+        # breakpoint()
         return input_dict
 
     def format_results(self,
@@ -240,7 +237,7 @@ class CustomWaymoDataset(KittiDataset):
             from .zlt_kitti2waymo import zlt_KITTI2Waymo as KITTI2Waymo
             waymo_root = osp.join(
                 self.data_root.split('kitti_format')[0], 'waymo_format')
-            if 'train' in self.ann_file:
+            if 'waymo_infos_train.pkl' in self.ann_file:
                 waymo_tfrecords_dir = osp.join(waymo_root, 'training')
                 prefix = '0'
             elif self.split == 'training':

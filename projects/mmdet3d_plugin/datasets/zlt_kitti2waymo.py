@@ -87,6 +87,9 @@ class zlt_KITTI2Waymo(object):
             print('it is the first time you evaluate this dataset split, we will collect info in tfrecords to speed up evaluations')
             self.gather_tfrecord_info()
         self.tf_infos = mmcv.load(join(self.waymo_tfrecords_dir, 'tf_info_all.pkl'))
+        self.time=time()
+        self.error_log = open('debug/kitti2waymo/kitti2waymo_frames_not_found_{}.txt'.format(self.time),'w')
+        self.ERROR=False
         # print(self.waymo_tfrecord_pathnames)
         # print(self.name2idx)
         # print(kitti_result_files[0])
@@ -214,7 +217,11 @@ class zlt_KITTI2Waymo(object):
         kitti_result = self.kitti_result_files[i]
         info = self.tf_infos.get(self.sample_index[i])
         if info == None:
-            print('{} not found'.format(self.sample_index[i]))
+            if self.ERROR==False:
+                mmcv.dump({'kitti_result':self.kitti_result_files, 'tf_infos': self.tf_infos},
+                    'debug/kitti2waymo/kitti2waymo_kittiresult_tfinfos_{}.pkl'.format(self.time))
+            self.ERROR = True
+            print('{} not found'.format(self.sample_index[i]),file = self.error_log)
             return
 
         filename = info['filename']
