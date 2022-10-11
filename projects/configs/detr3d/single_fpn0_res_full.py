@@ -9,7 +9,7 @@ dataset_type = 'CustomWaymoDataset'
 # data_root = 'data/waymo_v131/kitti_format/'
 data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
-# data_root = 'data/waymo_subset_v131/kitti_format/'  ##gpu37
+# data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
 # resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/detr3d_waymo_fcos3d++/epoch_14_copy.pth'
@@ -23,7 +23,7 @@ point_cloud_range = [-35, -75, -2, 75, 75, 4]
 voxel_size = [0.5, 0.5, 6]
 num_views = 5
 img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
-img_scale = (832, 1248)
+img_scale = (1280, 1920)
 input_modality = dict(
     use_lidar=False,
     use_camera=True)
@@ -37,7 +37,7 @@ model = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        # with_cp=True,
+        with_cp=True,
         norm_cfg=dict(type='BN2d', requires_grad=False),
         norm_eval=True,
         style='caffe',
@@ -47,7 +47,7 @@ model = dict(
             type='Pretrained',
             checkpoint='open-mmlab://detectron2/resnet101_caffe')),
     img_neck=dict(
-        type='FPN',
+        type='FPN_cut',
         in_channels=[256, 512, 1024, 2048],
         out_channels=256,
         start_level=1,
@@ -209,8 +209,7 @@ data = dict(
         test_mode=True,
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
-        box_type_3d='LiDAR',
-        load_interval=5))
+        box_type_3d='LiDAR'))
 
 optimizer = dict(
     type='AdamW', 
@@ -232,4 +231,4 @@ total_epochs = 24
 evaluation = dict(_delete_=True, interval=12)
 checkpoint_config = dict(interval=4, max_keep_ckpts=24)
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
-find_unused_parameters=True
+# find_unused_parameters=True

@@ -6,10 +6,10 @@ plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 
 dataset_type = 'CustomWaymoDataset'
-# data_root = 'data/waymo_v131/kitti_format/'
-data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
+data_root = 'data/waymo_v131/kitti_format/'
+# data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
-# data_root = 'data/waymo_subset_v131/kitti_format/'  ##gpu37
+# data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
 # resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/detr3d_waymo_fcos3d++/epoch_14_copy.pth'
@@ -23,7 +23,7 @@ point_cloud_range = [-35, -75, -2, 75, 75, 4]
 voxel_size = [0.5, 0.5, 6]
 num_views = 5
 img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
-img_scale = (832, 1248)
+img_scale = (640, 960)
 input_modality = dict(
     use_lidar=False,
     use_camera=True)
@@ -67,8 +67,6 @@ model = dict(
         transformer=dict(
             type='Detr3DTransformer',
             num_cams = num_views,
-            num_feature_levels=1,
-            selected_feature_level = 0,
             decoder=dict(
                 type='Detr3DTransformerDecoder',
                 num_layers=6,
@@ -83,7 +81,6 @@ model = dict(
                             dropout=0.1),
                         dict(
                             type='Detr3DCrossAtten',
-                            num_levels=1,
                             pc_range=point_cloud_range,
                             num_cams = num_views,
                             num_points=1,
@@ -168,7 +165,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
-        times=1,
+        times=10,
         dataset=dict(
             type=dataset_type,
             data_root=data_root,
@@ -209,8 +206,7 @@ data = dict(
         test_mode=True,
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
-        box_type_3d='LiDAR',
-        load_interval=5))
+        box_type_3d='LiDAR'))
 
 optimizer = dict(
     type='AdamW', 
@@ -229,7 +225,6 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
 total_epochs = 24
-evaluation = dict(_delete_=True, interval=12)
-checkpoint_config = dict(interval=4, max_keep_ckpts=24)
+evaluation = dict(_delete_=True, interval=24)
+checkpoint_config = dict(interval=24, max_keep_ckpts=24)
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
-find_unused_parameters=True

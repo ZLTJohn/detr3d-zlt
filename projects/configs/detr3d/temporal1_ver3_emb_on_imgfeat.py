@@ -5,14 +5,14 @@ _base_ = [
 plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 
-dataset_type = 'CustomWaymoDataset'
+dataset_type = 'CustomWaymoDataset_T'
 # data_root = 'data/waymo_v131/kitti_format/'
 data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
-# data_root = 'data/waymo_subset_v131/kitti_format/'  ##gpu37
+# data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
-# resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/detr3d_waymo_fcos3d++/epoch_14_copy.pth'
+# resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/temporal_baseline1/latest.pth'
 # load_from='ckpts/fcos3d.pth'
 class_names = [ # 不确定sign类别是否叫sign
     'Car', 'Pedestrian', 'Cyclist'
@@ -22,14 +22,14 @@ class_names = [ # 不确定sign类别是否叫sign
 point_cloud_range = [-35, -75, -2, 75, 75, 4]
 voxel_size = [0.5, 0.5, 6]
 num_views = 5
-img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
-img_scale = (832, 1248)
+img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)    #first to_rgb(if in bgr way), then do mean, last do std
+img_scale = (640, 960)
 input_modality = dict(
     use_lidar=False,
     use_camera=True)
 
 model = dict(
-    type='Detr3D',
+    type='Detr3D_T',
     use_grid_mask=True,
     img_backbone=dict(
         type='ResNet',
@@ -65,10 +65,8 @@ model = dict(
         with_box_refine=True,
         as_two_stage=False,
         transformer=dict(
-            type='Detr3DTransformer',
+            type='Detr3DTransformer_T1v3',
             num_cams = num_views,
-            num_feature_levels=1,
-            selected_feature_level = 0,
             decoder=dict(
                 type='Detr3DTransformerDecoder',
                 num_layers=6,
@@ -82,8 +80,7 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCrossAtten',
-                            num_levels=1,
+                            type='Detr3DCrossAtten_T1v3',
                             pc_range=point_cloud_range,
                             num_cams = num_views,
                             num_points=1,
@@ -130,7 +127,13 @@ model = dict(
             iou_cost=dict(type='IoUCost', weight=0.0), # Fake cost. This is just to make it compatible with DETR head. 
             pc_range=point_cloud_range))))
 
-
+meta_keys=('filename', 'ori_shape', 'img_shape', 'lidar2img',
+                   'depth2img', 'cam2img', 'pad_shape', 'scale_factor', 'flip',
+                   'pcd_horizontal_flip', 'pcd_vertical_flip', 'box_mode_3d',
+                   'box_type_3d', 'img_norm_cfg', 'pcd_trans', 'sample_idx',
+                   'pcd_scale_factor', 'pcd_rotation', 'pcd_rotation_angle',
+                   'pts_filename', 'transformation_3d_flow', 'trans_mat',
+                   'affine_aug', 'pose')
 train_pipeline = [
     dict(type='MyLoadMultiViewImageFromFiles', to_float32=True, img_scale=(1280, 1920)),#do paddings for ill-shape imgs
     dict(type='MyResize', img_scale=img_scale, keep_ratio=True),
@@ -142,7 +145,7 @@ train_pipeline = [
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
     dict(type='PadMultiViewImage', size_divisor=32),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
-    dict(type='Collect3D', keys=['gt_bboxes_3d', 'gt_labels_3d', 'img'])
+    dict(type='Collect3D', keys=['gt_bboxes_3d', 'gt_labels_3d', 'img'], meta_keys=meta_keys)
 ]
 test_pipeline = [
     dict(type='MyLoadMultiViewImageFromFiles', to_float32=True, img_scale=(1280, 1920)),
@@ -159,7 +162,7 @@ test_pipeline = [
                 type='DefaultFormatBundle3D',
                 class_names=class_names,
                 with_label=False),
-            dict(type='Collect3D', keys=['img'])
+            dict(type='Collect3D', keys=['img'], meta_keys=meta_keys)
         ])
 ]
 
@@ -196,7 +199,8 @@ data = dict(
         test_mode=True,
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
-        box_type_3d='LiDAR'),
+        box_type_3d='LiDAR',
+        load_interval=5),
     test=dict(
         type=dataset_type,
         data_root=data_root,
@@ -229,7 +233,6 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
 total_epochs = 24
-evaluation = dict(_delete_=True, interval=12)
+evaluation = dict(_delete_=True, interval=6)
 checkpoint_config = dict(interval=4, max_keep_ckpts=24)
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
-find_unused_parameters=True
