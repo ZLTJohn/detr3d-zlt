@@ -5,7 +5,6 @@ _base_ = [
 plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 
-# dataset_type = 'CustomWaymoDataset_T'
 dataset_type = 'CustomWaymoDataset_T_test_align'
 data_root = 'data/waymo_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
@@ -13,8 +12,9 @@ data_root = 'data/waymo_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
-resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/temporal_baseline1/latest.pth'
+# resume_from = '/home/zhenglt/pure-detr3d/work_dirs/temporal_baseline1_2Hz_recheck/latest.pth'
 # load_from='ckpts/fcos3d.pth'
+# load_from = '/home/zhenglt/pure-detr3d/work_dirs/baseline_pretrain/epoch_24.pth'
 class_names = [ # 不确定sign类别是否叫sign
     'Car', 'Pedestrian', 'Cyclist'
 ]
@@ -30,9 +30,9 @@ input_modality = dict(
     use_camera=True)
 
 model = dict(
-    # type='Detr3D_T',
     type='Detr3D_T_test_align',
     use_grid_mask=True,
+    # debug_name = 'T1_2Hz',
     img_backbone=dict(
         type='ResNet',
         depth=101,
@@ -235,6 +235,6 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
 total_epochs = 24
-evaluation = dict(_delete_=True, interval=24)
-
+evaluation = dict(_delete_=True, interval=4)
+checkpoint_config = dict(interval=1, max_keep_ckpts=1)
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)

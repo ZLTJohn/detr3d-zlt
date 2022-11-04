@@ -204,16 +204,15 @@ data = dict(
         type=dataset_type,
         data_root=data_root,
         num_views=num_views,
-        ann_file=data_root + 'waymo_infos_val.pkl',
-        split='training',
+        ann_file=data_root + 'waymo_infos_test.pkl',
+        split='testing',
         pipeline=test_pipeline,
         modality=input_modality,
         classes=class_names,
         test_mode=True,
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
-        box_type_3d='LiDAR',
-        load_interval=5))
+        box_type_3d='LiDAR'))
 
 optimizer = dict(
     type='AdamW', 
@@ -232,5 +231,6 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
 total_epochs = 24
+checkpoint_config = dict(interval=1, max_keep_ckpts=4)
 evaluation = dict(_delete_=True, interval=2)
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)

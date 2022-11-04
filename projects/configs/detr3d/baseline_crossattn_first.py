@@ -12,7 +12,7 @@ data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
-# resume_from = '/home/zhenglt/pure-detr3d/work_dirs/baseline_crossattn_first/epoch_20.pth'
+resume_from = '/home/zhenglt/pure-detr3d/work_dirs/baseline_crossattn_first/latest.pth'
 # load_from='ckpts/fcos3d.pth'
 load_from = 'ckpts/waymo_pretrain_fullres_pgd_mv_8gpu_for_detr3d_backbone_statedict_only.pth'
 class_names = [ # 不确定sign类别是否叫sign

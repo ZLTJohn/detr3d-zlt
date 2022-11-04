@@ -5,16 +5,17 @@ _base_ = [
 plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 
-# dataset_type = 'CustomWaymoDataset_T'
-dataset_type = 'CustomWaymoDataset_T_test_align'
+dataset_type = 'CustomWaymoDataset'
 data_root = 'data/waymo_v131/kitti_format/'
+# data_root = '/localdata_hdd/waymo_v1.3.1_untar/kitti_format/'
 # data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
 # data_root = '/localdata_ssd/waymo_subset_v131/kitti_format/'  ##gpu37
 
 file_client_args = dict(backend='disk')
-resume_from = '/home/zhengliangtao/pure-detr3d/work_dirs/temporal_baseline1/latest.pth'
+# resume_from = '/home/zhenglt/pure-detr3d/work_dirs/baseline_pretrain+res_full/epoch_5.pth'
 # load_from='ckpts/fcos3d.pth'
+load_from = 'ckpts/waymo_pretrain_fullres_pgd_mv_8gpu_for_detr3d_backbone_statedict_only.pth'
 class_names = [ # 不确定sign类别是否叫sign
     'Car', 'Pedestrian', 'Cyclist'
 ]
@@ -23,15 +24,16 @@ class_names = [ # 不确定sign类别是否叫sign
 point_cloud_range = [-35, -75, -2, 75, 75, 4]
 voxel_size = [0.5, 0.5, 6]
 num_views = 5
-img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)    #first to_rgb(if in bgr way), then do mean, last do std
-img_scale = (640, 960)
+# img_norm_cfg = dict(mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
+img_norm_cfg = dict(
+    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
+img_scale = (1280, 1920)
 input_modality = dict(
     use_lidar=False,
     use_camera=True)
 
 model = dict(
-    # type='Detr3D_T',
-    type='Detr3D_T_test_align',
+    type='Detr3D',
     use_grid_mask=True,
     img_backbone=dict(
         type='ResNet',
@@ -39,15 +41,16 @@ model = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        # with_cp=True,
+        with_cp=True,
         norm_cfg=dict(type='BN2d', requires_grad=False),
         norm_eval=True,
-        style='caffe',
+        style='pytorch',
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
         stage_with_dcn=(False, False, True, True),
-        init_cfg=dict(
-            type='Pretrained',
-            checkpoint='open-mmlab://detectron2/resnet101_caffe')),
+        # init_cfg=dict(
+        #     type='Pretrained',
+        #     checkpoint='open-mmlab://detectron2/resnet101_caffe')
+        ),
     img_neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -82,7 +85,7 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCrossAtten_T',
+                            type='Detr3DCrossAtten',
                             pc_range=point_cloud_range,
                             num_cams = num_views,
                             num_points=1,
@@ -129,13 +132,7 @@ model = dict(
             iou_cost=dict(type='IoUCost', weight=0.0), # Fake cost. This is just to make it compatible with DETR head. 
             pc_range=point_cloud_range))))
 
-meta_keys=('filename', 'ori_shape', 'img_shape', 'lidar2img',
-                   'depth2img', 'cam2img', 'pad_shape', 'scale_factor', 'flip',
-                   'pcd_horizontal_flip', 'pcd_vertical_flip', 'box_mode_3d',
-                   'box_type_3d', 'img_norm_cfg', 'pcd_trans', 'sample_idx',
-                   'pcd_scale_factor', 'pcd_rotation', 'pcd_rotation_angle',
-                   'pts_filename', 'transformation_3d_flow', 'trans_mat',
-                   'affine_aug', 'pose')
+
 train_pipeline = [
     dict(type='MyLoadMultiViewImageFromFiles', to_float32=True, img_scale=(1280, 1920)),#do paddings for ill-shape imgs
     dict(type='MyResize', img_scale=img_scale, keep_ratio=True),
@@ -147,7 +144,7 @@ train_pipeline = [
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
     dict(type='PadMultiViewImage', size_divisor=32),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
-    dict(type='Collect3D', keys=['gt_bboxes_3d', 'gt_labels_3d', 'img'], meta_keys=meta_keys)
+    dict(type='Collect3D', keys=['gt_bboxes_3d', 'gt_labels_3d', 'img'])
 ]
 test_pipeline = [
     dict(type='MyLoadMultiViewImageFromFiles', to_float32=True, img_scale=(1280, 1920)),
@@ -164,7 +161,7 @@ test_pipeline = [
                 type='DefaultFormatBundle3D',
                 class_names=class_names,
                 with_label=False),
-            dict(type='Collect3D', keys=['img'], meta_keys=meta_keys)
+            dict(type='Collect3D', keys=['img'])
         ])
 ]
 
@@ -201,8 +198,7 @@ data = dict(
         test_mode=True,
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
-        box_type_3d='LiDAR',
-        load_interval=5),
+        box_type_3d='LiDAR'),
     test=dict(
         type=dataset_type,
         data_root=data_root,
