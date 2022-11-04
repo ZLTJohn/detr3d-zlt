@@ -261,8 +261,7 @@ class CustomWaymoDataset(KittiDataset):
             converter = KITTI2Waymo(resfile,
                                     waymo_tfrecords_dir,
                                     waymo_results_save_dir,
-                                    waymo_results_final_path, prefix,
-                                    eval_mask = self.eval_mask)
+                                    waymo_results_final_path, prefix)
             print("still work before converter convert!!!")
             print(waymo_tfrecords_dir, waymo_results_save_dir, waymo_results_final_path)
             # exit(0)
