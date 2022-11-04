@@ -233,6 +233,7 @@ class CustomWaymoDataset(KittiDataset):
         # exit(0)
         # open('zlt_output_kitti_format_debug.txt','w').write(str(result_files))  #we got absolutely right data
         # exit(0)  
+        # breakpoint()
         if 'waymo' in data_format:
             from .zlt_kitti2waymo import zlt_KITTI2Waymo as KITTI2Waymo
             waymo_root = osp.join(
@@ -253,14 +254,15 @@ class CustomWaymoDataset(KittiDataset):
             waymo_results_final_path = f'{pklfile_prefix}.bin'
             print("still work before converter init!!!")
             if 'pts_bbox' in result_files:#result_files deprecated
-                converter = KITTI2Waymo(result_files['pts_bbox'],
-                                        waymo_tfrecords_dir,
-                                        waymo_results_save_dir,
-                                        waymo_results_final_path, prefix)
+                resfile = result_files['pts_bbox']
             else:
-                converter = KITTI2Waymo(result_files, waymo_tfrecords_dir,
-                                        waymo_results_save_dir,
-                                        waymo_results_final_path, prefix)# worker弄小一点看看行不行
+                resfile = result_files
+            # breakpoint()
+            converter = KITTI2Waymo(resfile,
+                                    waymo_tfrecords_dir,
+                                    waymo_results_save_dir,
+                                    waymo_results_final_path, prefix,
+                                    eval_mask = self.eval_mask)
             print("still work before converter convert!!!")
             print(waymo_tfrecords_dir, waymo_results_save_dir, waymo_results_final_path)
             # exit(0)
@@ -321,9 +323,10 @@ class CustomWaymoDataset(KittiDataset):
                 data_format='waymo')# xxxxxxx not found inside, maybe it's OK
 
             import shutil
-            shutil.copy(f'{pklfile_prefix}.bin', 'work_dirs/result.bin')
             from time import time
             _ = time()
+            shutil.copy(f'{pklfile_prefix}.bin', 'results/result_{}.bin'.format(_))
+            print('save output bin to results/result_{}.bin'.format(_))
             ap_dict = compute_waymo_let_metric(f'{waymo_root}/{self.gt_bin}', f'{pklfile_prefix}.bin')
             print('time usage of compute_let_metric: {} s'.format(time()-_))        
             

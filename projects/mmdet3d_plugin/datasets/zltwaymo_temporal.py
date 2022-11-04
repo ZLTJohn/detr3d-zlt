@@ -46,7 +46,6 @@ class CustomWaymoDataset_T(CustomWaymoDataset):
 
     def prepare_train_data(self, index):
         #[T, T-1]
-        index = index * self.load_interval
         idx_list = list(range(index-self.history_len, index))
         random.shuffle(idx_list)
         idx_list = idx_list[self.skip_len:] + [index]#skip frame
@@ -100,10 +99,8 @@ class CustomWaymoDataset_T(CustomWaymoDataset):
         return queue
 
     def get_data_info(self, index):
-        if self.test_mode == True:
-            info = self.data_infos[index]
-        else: info = self.data_infos_full[index]
-        
+        info = self.data_infos[index]
+        # info = self.data_infos_full[index*self.interval]
         sample_idx = info['image']['image_idx']
         img_filename = os.path.join(self.data_root,
                                     info['image']['image_path'])
@@ -157,48 +154,3 @@ class CustomWaymoDataset_T(CustomWaymoDataset):
             input_dict['ann_info'] = annos
         
         return input_dict
-
-    def get_ann_info(self, index):
-        # Use index to get the annos, thus the evalhook could also use this api
-        if self.test_mode == True:
-            info = self.data_infos[index]
-        else: info = self.data_infos_full[index]
-        
-        rect = info['calib']['R0_rect'].astype(np.float32)
-        Trv2c = info['calib']['Tr_velo_to_cam'].astype(np.float32)
-
-        annos = info['annos']
-        # we need other objects to avoid collision when sample
-        annos = self.remove_dontcare(annos)
-        loc = annos['location']
-        dims = annos['dimensions']
-        rots = annos['rotation_y']
-        gt_names = annos['name']
-        gt_bboxes_3d = np.concatenate([loc, dims, rots[..., np.newaxis]],
-                                      axis=1).astype(np.float32)
-
-        # convert gt_bboxes_3d to velodyne coordinates
-        gt_bboxes_3d = CameraInstance3DBoxes(gt_bboxes_3d).convert_to(
-            self.box_mode_3d, np.linalg.inv(rect @ Trv2c))
-        gt_bboxes = annos['bbox']
-
-        selected = self.drop_arrays_by_name(gt_names, ['DontCare'])
-        gt_bboxes = gt_bboxes[selected].astype('float32')
-        gt_names = gt_names[selected]
-
-        gt_labels = []
-        for cat in gt_names:
-            if cat in self.CLASSES:
-                gt_labels.append(self.CLASSES.index(cat))
-            else:
-                gt_labels.append(-1)
-        gt_labels = np.array(gt_labels).astype(np.int64)
-        gt_labels_3d = copy.deepcopy(gt_labels)
-
-        anns_results = dict(
-            gt_bboxes_3d=gt_bboxes_3d,
-            gt_labels_3d=gt_labels_3d,
-            bboxes=gt_bboxes,
-            labels=gt_labels,
-            gt_names=gt_names)
-        return anns_results
