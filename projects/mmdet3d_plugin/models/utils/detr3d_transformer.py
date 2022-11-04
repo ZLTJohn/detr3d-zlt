@@ -191,7 +191,7 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
         for lid, layer in enumerate(self.layers):
             # _ = time.time()
             reference_points_input = reference_points
-            output = layer(
+            output = layer(### fucked up in self-attn module
                 output,
                 *args,
                 reference_points=reference_points_input,
@@ -258,7 +258,8 @@ class Detr3DCrossAtten(BaseModule):
                  dropout=0.1,
                  norm_cfg=None,
                  init_cfg=None,
-                 batch_first=False):
+                 batch_first=False,
+                 waymo_with_nuscene=False):
         super(Detr3DCrossAtten, self).__init__(init_cfg)
         if embed_dims % num_heads != 0:
             raise ValueError(f'embed_dims must be divisible by num_heads, '
@@ -305,7 +306,7 @@ class Detr3DCrossAtten(BaseModule):
             nn.ReLU(inplace=True),
         )
         self.batch_first = batch_first
-
+        self.waymo_with_nuscene = waymo_with_nuscene
         self.init_weight()
 
     def init_weight(self):
@@ -381,11 +382,13 @@ class Detr3DCrossAtten(BaseModule):
         # print('  '*6+'feature_sampling ',__-_1,'ms')
         output = torch.nan_to_num(output)
         mask = torch.nan_to_num(mask)
+        if self.waymo_with_nuscene == True:
+            num_view = mask.shape[3]
+            attention_weights = attention_weights[:,:,:, :num_view,...]
         attention_weights = attention_weights.sigmoid() * mask
         output = output * attention_weights
         output = output.sum(-1).sum(-1).sum(-1)
         output = output.permute(2, 0, 1)
-        
         output = self.output_proj(output)#还调整么。。。后面有ffn按理说应该够用了吧？
         # (num_query, bs, embed_dims)
         pos_feat = self.position_encoder(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
@@ -393,7 +396,7 @@ class Detr3DCrossAtten(BaseModule):
         return self.dropout(output) + inp_residual + pos_feat
 
 
-def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
+def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas, return_depth=False):
     lidar2img = []
     for img_meta in img_metas:
         lidar2img.append(img_meta['lidar2img'])
@@ -425,7 +428,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     mask = (reference_points_cam[..., 2:3] > eps)   #filter out negative depth, B num_c num_q
     reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(  #z for depth, too shallow will cause zero division
         reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)    # eps controls minimum
-
     # ref_point_visualize = reference_points_cam.clone()
     #try to normalize to the coordinate in feature map
     if type(img_metas[0]['ori_shape']) == tuple:    
@@ -457,7 +459,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
         sampled_feats.append(sampled_feat)
     sampled_feats = torch.stack(sampled_feats, -1)
     sampled_feats = sampled_feats.view(B, C, num_query, num_cam,  1, len(mlvl_feats))
-    
     # import cv2,mmcv
     # imgs = [mmcv.imread(name) for name in img_metas[0]['filename']]
     # for i in range(len(imgs)):
@@ -488,7 +489,10 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     #         mmcv.imwrite(imgs[i], 'debug_image/nuscene_layer1_refpoint_vis_{}.png'.format(i))
     #     exit(0)
     # print(img_metas)
-    return reference_points_3d, sampled_feats, mask
+    if return_depth == True:
+        return reference_points_3d, sampled_feats, mask, refpt_depth
+    else:
+        return reference_points_3d, sampled_feats, mask
 
 def load_pts(img_metas):
     path = img_metas[0]['pts_filename']

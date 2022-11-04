@@ -49,17 +49,18 @@ def save_bbox2img(img, gt_bboxes_3d, img_metas, dirname='debug_coord', name = No
     lidar2img = np.asarray(lidar2img)
     lidar2img = reference_points.new_tensor(lidar2img) # (B, N, 4, 4)
     reference_points = torch.cat((reference_points, torch.ones_like(reference_points[..., :1])), -1)
-
+    ref_3d = reference_points.clone()
     B, num_query = reference_points.size()[:2]
     num_cam = lidar2img.size(1)
     reference_points = reference_points.view(B, 1, num_query, 4).repeat(1, num_cam, 1, 1).unsqueeze(-1)##B num_c num_q 4 ,1
     lidar2img = lidar2img.view(B, num_cam, 1, 4, 4).repeat(1, 1, num_query, 1, 1)   # B num_c num_q 4 4
     reference_points_cam = torch.matmul(lidar2img, reference_points).squeeze(-1)    # B num_c num_q 4
+    ref_img = reference_points_cam.clone()
     eps = 1e-5
     mask = (reference_points_cam[..., 2:3] > eps)   #filter out negative depth, B num_c num_q
     reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(  #z for depth, too shallow will cause zero division
         reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)    # eps controls minimum
-
+    ref_pixel = reference_points_cam.clone()
     if type(img_metas[0]['ori_shape']) == tuple:    
         reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
         reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]

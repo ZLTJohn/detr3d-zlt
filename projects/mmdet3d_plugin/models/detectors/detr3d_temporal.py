@@ -33,6 +33,7 @@ class Detr3D_T(MVXTwoStageDetector):
                  test_cfg=None,
                  pretrained=None,
                  debug_name=None,
+                 gtvis_range = [0,105],
                  vis_count=30):
         super(Detr3D_T,
               self).__init__(pts_voxel_layer, pts_voxel_encoder,
@@ -44,7 +45,8 @@ class Detr3D_T(MVXTwoStageDetector):
         self.use_grid_mask = use_grid_mask
         self.prev = {'img_feats': None, 'img_metas':None, 'scene_id':None}
         self.debug_name = debug_name
-        self.vis_count = 30
+        self.gtvis_range = gtvis_range
+        self.vis_count = vis_count
 
     def extract_img_feat(self, img, img_metas, len_queue=None):
         """Extract features of images."""
@@ -148,29 +150,6 @@ class Detr3D_T(MVXTwoStageDetector):
                       gt_bboxes_ignore=None,
                       img_depth=None,
                       img_mask=None):
-        """Forward training function.
-        Args:
-            points (list[torch.Tensor], optional): Points of each sample.
-                Defaults to None.
-            img_metas (list[dict], optional): Meta information of each sample.
-                Defaults to None.
-            gt_bboxes_3d (list[:obj:`BaseInstance3DBoxes`], optional):
-                Ground truth 3D boxes. Defaults to None.
-            gt_labels_3d (list[torch.Tensor], optional): Ground truth labels
-                of 3D boxes. Defaults to None.
-            gt_labels (list[torch.Tensor], optional): Ground truth labels
-                of 2D boxes in images. Defaults to None.
-            gt_bboxes (list[torch.Tensor], optional): Ground truth 2D boxes in
-                images. Defaults to None.
-            img (torch.Tensor optional): Images of each sample with shape
-                (N, C, H, W). Defaults to None.
-            proposals ([list[torch.Tensor], optional): Predicted proposals
-                used for training Fast RCNN. Defaults to None.
-            gt_bboxes_ignore (list[torch.Tensor], optional): Ground truth
-                2D boxes in images to be ignored. Defaults to None.
-        Returns:
-            dict: Losses of different branches.
-        """
         len_queue = img.size(1)
         prev_img = img[:, :-1, ...]
         img = img[:, -1, ...]
@@ -179,7 +158,19 @@ class Detr3D_T(MVXTwoStageDetector):
         # prev_bev = None
         img_metas = [each[len_queue-1] for each in img_metas]
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
-        # breakpoint()
+        if self.debug_name!= None:
+            dir = 'debug/debug_temporal1/'
+            name = str(img_metas[0]['sample_idx'])
+            if os.path.exists(dir + name) == False:
+                os.mkdir(dir + name)
+            visualize_gt(gt_bboxes_3d, gt_labels_3d, img_metas,
+                    self.debug_name,
+                    dir_name = dir + name,
+                    gtvis_range = self.gtvis_range)
+            visualize_gt(gt_bboxes_3d, gt_labels_3d, [prev_img_metas[0][0]],
+                    self.debug_name+'_prev',
+                    dir_name = dir + name,
+                    gtvis_range = self.gtvis_range)
         losses = dict()
         losses_pts = self.forward_pts_train(img_feats, gt_bboxes_3d,
                                             gt_labels_3d, img_metas,
@@ -228,12 +219,16 @@ class Detr3D_T(MVXTwoStageDetector):
         only support B=1 now
         """
         # outs = self.pts_bbox_head(pts_feats, img_metas, prev_img_feat, prev_img_metas)
+        # breakpoint() #nothing wrong compared to test_align
+        if self.prev['scene_id'] != None:
+            print('\nbefoer update:gpu: {}, img_feat devices: {}, prev_feat devices: {}, prev_frame: {}, curr_frame: {}'.format(torch.distributed.get_rank(),x[0].device,self.prev['img_feats'][0].device,self.prev['img_metas'][0][0]['sample_idx'],img_metas[0]['sample_idx']))
         self.update_prev(x, img_metas, Force = (self.prev['scene_id'] == None))
-        # breakpoint()
+        print('\nafter update gpu: {}, img_feat devices: {}, prev_feat devices: {}, prev_frame: {}, curr_frame: {}'.format(torch.distributed.get_rank(),x[0].device,self.prev['img_feats'][0].device,self.prev['img_metas'][0][0]['sample_idx'],img_metas[0]['sample_idx']))
+
         outs = self.pts_bbox_head(x, img_metas, prev_img_feat = self.prev['img_feats'], prev_img_metas = self.prev['img_metas'])
         bbox_list = self.pts_bbox_head.get_bboxes(
             outs, img_metas, rescale=rescale)
-        # breakpoint()
+        # breakpoint() # result differs
         bbox_results = [
             bbox3d2result(bboxes, scores, labels)       # to CPU
             for bboxes, scores, labels in bbox_list     #for each in batch
@@ -243,14 +238,14 @@ class Detr3D_T(MVXTwoStageDetector):
     def simple_test(self, img_metas, img=None, rescale=False):
         """Test function without augmentaiton."""
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
-        bbox_list = [dict() for i in range(len(img_metas))] 
+        bbox_list = [dict() for i in range(len(img_metas))]
         bbox_pts = self.simple_test_pts(
             img_feats, img_metas, rescale=rescale)
 
         if self.debug_name != None:
             # name = str(time.time())
             # breakpoint()
-            dir = 'debug/visualization/'
+            dir = 'debug/debug_temporal1/'
             name = str(img_metas[0]['sample_idx'])
             if os.path.exists(dir + name) == False:
                 os.mkdir(dir + name)
