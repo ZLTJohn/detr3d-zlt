@@ -11,7 +11,11 @@ from mmdet3d.core import bbox3d2result
 from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from projects.mmdet3d_plugin.models.utils.grid_mask import GridMask
 from .visualizer_zlt import *
-
+"""
+detr3d_temporal now only support single gpu evaluation since the distributed data sampler
+has problem that samples are not distributed in sequence in one gpu, leading to uncontrollable
+temporal interval
+"""
 @DETECTORS.register_module()
 class Detr3D_T(MVXTwoStageDetector):
     """Detr3D."""

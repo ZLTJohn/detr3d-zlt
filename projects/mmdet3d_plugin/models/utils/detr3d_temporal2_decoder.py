@@ -90,6 +90,8 @@ class Detr3DTransformerDecoder_T2(TransformerLayerSequence):
         intermediate = []
         intermediate_reference_points = []
         self.check_prev_scene(kwargs['img_metas'], kwargs['clear_prev'])
+        if self.prev['img_metas'] != None:
+            print('\nafter update gpu: {}, prev_frame: {}, curr_frame: {}'.format(torch.distributed.get_rank(),self.prev['img_metas'][0]['sample_idx'],kwargs['img_metas'][0]['sample_idx']))
         for lid, layer in enumerate(self.layers):
             reference_points_input = reference_points
             output = layer(

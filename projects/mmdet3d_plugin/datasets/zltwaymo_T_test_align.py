@@ -34,6 +34,7 @@ class CustomWaymoDataset_T_test_align(CustomWaymoDataset_T):
         data_queue = []
         scene_id = None
         for i in idx_list:
+            i = max(0,i)
             input_dict = self.get_data_info(i)
             if scene_id == None: scene_id = input_dict['sample_idx']//1000
             if (input_dict != None) and (scene_id == input_dict['sample_idx']//1000):
