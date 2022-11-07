@@ -40,22 +40,7 @@ class Detr3DTransformer_T1v3(Detr3DTransformer):
 
 @ATTENTION.register_module()
 class Detr3DCrossAtten_T1v3(BaseModule):
-    """An attention module used in Detr3d. 
-    Args:
-        embed_dims (int): The embedding dimension of Attention.
-            Default: 256.
-        num_heads (int): Parallel attention heads. Default: 64.
-        num_levels (int): The number of feature map used in
-            Attention. Default: 4.
-        num_points (int): The number of sampling points for
-            each query in each head. Default: 4.
-        im2col_step (int): The step used in image_to_column.
-            Default: 64.
-        dropout (float): A Dropout layer on `inp_residual`.
-            Default: 0..
-        init_cfg (obj:`mmcv.ConfigDict`): The Config for initialization.
-            Default: None.
-    """
+    """ temporal embeddings on img feature, low performance """
 
     def __init__(self,
                  embed_dims=256,

@@ -42,6 +42,7 @@ class PositionalEncoding(nn.Module):
 
 @ATTENTION.register_module()
 class Detr3DCrossAtten_T1v1_1(BaseModule):
+    """ add temporal embeddings for queries"""
     def __init__(self,
                  embed_dims=256,
                  num_heads=8,

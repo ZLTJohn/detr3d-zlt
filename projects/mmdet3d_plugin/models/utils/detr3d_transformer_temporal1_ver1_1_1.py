@@ -21,6 +21,7 @@ from .detr3d_transformer_temporal1_ver1_1 import PositionalEncoding
 
 @ATTENTION.register_module()
 class Detr3DCrossAtten_T1v1_1_1(BaseModule):
+    """ use attn weight to fusion instead of temporal fusion layer"""
     def __init__(self,
                  embed_dims=256,
                  num_heads=8,
