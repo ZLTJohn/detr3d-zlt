@@ -132,15 +132,26 @@ class Detr3D_T(MVXTwoStageDetector):
             return self.forward_train(**kwargs)
         else:
             return self.forward_test(**kwargs)
-    def obtain_history_feat(self, imgs_queue, img_metas_list):
+
+    def obtain_history_feat(self, imgs_queue, img_metas_list, test_mode=False):
         self.eval()
         with torch.no_grad():
             prev_bev = None
             bs, len_queue, num_cams, C, H, W = imgs_queue.shape
             imgs_queue = imgs_queue.reshape(bs*len_queue, num_cams, C, H, W)
             img_feats_list = self.extract_feat(img=imgs_queue, img_metas=None, len_queue=len_queue)
+        if test_mode==False:
             self.train()
-            return img_feats_list
+        # with this open in test time, the self-attn module will fucked up, dropout remains in test time
+        # thus leading to different result against detr3d_temporal
+        # now we rip it off, and test if results remain the same, actually it goes up, 41.26->47->50
+        # now we got object bins of 41&&50, very different but breakpoints got the same shit, maybe its about post-processing
+        # >>> cnt
+        # 2338800
+        # >>> len(objs1.objects)
+        # 2399400
+        # guess that only every first frame in the scene resembles: (2399400-2338800)/300=202
+        return img_feats_list
 
     def forward_train(self,
                       points=None,
