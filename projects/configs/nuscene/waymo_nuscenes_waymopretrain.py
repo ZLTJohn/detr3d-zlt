@@ -7,14 +7,13 @@ plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 # load_from = 'ckpts/fcos3d_yue.pth'
 # load_from = 'ckpts/waymo_pretrain_pgd_mv_8gpu_for_detr3d_backbone_statedict_only.pth'
-# load_from = 'ckpts/waymo_pretrain_fullres_pgd_mv_8gpu_for_detr3d_backbone_statedict_only.pth'
+load_from = 'ckpts/waymo_pretrain_fullres_pgd_mv_8gpu_for_detr3d_backbone_statedict_only.pth'
 # resume_from = '/home/zhenglt/pure-detr3d/work_dirs/waymo_nuscenes/epoch_1.pth'
 
-point_cloud_range = [-51, -75, -2, 75, 75, 4]
+point_cloud_range = [-35, -75, -2, 75, 75, 4]
 voxel_size = [0.5, 0.5, 6]
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
-load_from='/home/zhenglt/pure-detr3d/ckpts/fcos3d_yue.pth'
 # point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 # voxel_size = [0.2, 0.2, 8]
 # img_norm_cfg = dict(
@@ -40,14 +39,17 @@ model = dict(
         type='ResNet',
         depth=101,
         num_stages=4,
-        with_cp=True,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
         norm_cfg=dict(type='BN2d', requires_grad=False),
         norm_eval=True,
-        style='caffe',
+        style='pytorch',
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
-        stage_with_dcn=(False, False, True, True)),
+        stage_with_dcn=(False, False, True, True),
+        # init_cfg=dict(
+        #     type='Pretrained',
+        #     checkpoint='open-mmlab://detectron2/resnet101_caffe')
+        ),
     img_neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -146,7 +148,7 @@ nus_train_pipeline = [
     dict(type='DefaultFormatBundle3D', class_names=nus_class_names),
     dict(type='Collect3D', keys=['gt_bboxes_3d', 'gt_labels_3d', 'img'])
 ]
-waymo_img_scale = (1280, 1920)
+waymo_img_scale = (1066, 1600)
 waymo_train_pipeline = [
     dict(type='MyLoadMultiViewImageFromFiles', to_float32=True, img_scale=(1280, 1920)),#do paddings for ill-shape imgs
     dict(type='MyResize', img_scale=waymo_img_scale, keep_ratio=True),
@@ -240,7 +242,7 @@ lr_config = dict(
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
-total_epochs = 32
+total_epochs = 24
 evaluation = dict(interval=1)
 checkpoint_config = dict(interval=1, max_keep_ckpts=1)
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
