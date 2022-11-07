@@ -5,7 +5,8 @@ _base_ = [
 plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 
-dataset_type = 'CustomWaymoDataset_TAlign'
+dataset_type = 'CustomWaymoDataset_T'
+# dataset_type = 'CustomWaymoDataset_TAlign'
 # data_root = 'data/waymo_v131/kitti_format/'
 data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'

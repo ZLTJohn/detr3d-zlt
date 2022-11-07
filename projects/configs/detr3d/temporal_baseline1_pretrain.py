@@ -5,7 +5,7 @@ _base_ = [
 plugin=True
 plugin_dir='projects/mmdet3d_plugin/'
 
-dataset_type = 'CustomWaymoDataset_T'
+dataset_type = 'CustomWaymoDataset_T_10Hz_2frame_testonly'
 # data_root = 'data/waymo_v131/kitti_format/'
 data_root = '/localdata_ssd/waymo_ssd_train_only/kitti_format/' #gpu39
 # data_root = '/public/MARS/datasets/waymo_v1.3.1_untar/waymo_subset_v131/kitti_format/'
@@ -31,7 +31,7 @@ input_modality = dict(
     use_camera=True)
 
 model = dict(
-    type='Detr3D_T',
+    type='Detr3D_T_test_align',
     use_grid_mask=True,
     img_backbone=dict(
         type='ResNet',
@@ -199,12 +199,13 @@ data = dict(
         test_mode=True,
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
-        box_type_3d='LiDAR'),
+        box_type_3d='LiDAR',
+        load_interval=5),
     test=dict(
         type=dataset_type,
         data_root=data_root,
         num_views=num_views,
-        ann_file=data_root + 'waymo_infos_train.pkl',
+        ann_file=data_root + 'waymo_infos_val.pkl',
         split='training',
         pipeline=test_pipeline,
         modality=input_modality,
@@ -213,9 +214,10 @@ data = dict(
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
         box_type_3d='LiDAR',
+        load_interval=5))
         # load_interval=20,  
         # temporal_eval=True node48 checking, true got  0.46429488 mAP, false got 0.6628mAP
-        ))
+        
 
 optimizer = dict(
     type='AdamW', 
