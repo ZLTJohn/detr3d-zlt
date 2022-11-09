@@ -62,6 +62,23 @@ class Detr3D_T_test_align(Detr3D_T):
             img_feats, img_metas, rescale, 
             prev_img_feat, prev_img_metas)
         
+        if self.debug_name != None:
+            # name = str(time.time())
+            # breakpoint()
+            dir = self.debug_dir
+            name = str(img_metas[0]['sample_idx'])
+            if os.path.exists(dir + name) == False:
+                os.mkdir(dir + name)
+            save_bbox_pred(bbox_pts, img, img_metas,
+                self.debug_name,
+                dir_name = dir + name, 
+                vis_count = self.vis_count)
+            print('curr: {}, prev: {}'.format(name,prev_img_metas[0][0]['sample_idx']))
+            save_bbox_pred(bbox_pts, img, [prev_img_metas[0][0]],
+                self.debug_name+'_prev', 
+                dir_name = dir + name, 
+                vis_count = self.vis_count)
+
         for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
             result_dict['pts_bbox'] = pts_bbox
         return bbox_list    #list of dict of pts_bbox=dict(bboxes scores labels), len()=batch size

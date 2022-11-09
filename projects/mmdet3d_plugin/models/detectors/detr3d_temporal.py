@@ -37,6 +37,7 @@ class Detr3D_T(MVXTwoStageDetector):
                  test_cfg=None,
                  pretrained=None,
                  debug_name=None,
+                 debug_dir='debug/2Hz_recheck/',
                  gtvis_range = [0,105],
                  vis_count=30):
         super(Detr3D_T,
@@ -49,6 +50,10 @@ class Detr3D_T(MVXTwoStageDetector):
         self.use_grid_mask = use_grid_mask
         self.prev = {'img_feats': None, 'img_metas':None, 'scene_id':None}
         self.debug_name = debug_name
+        self.debug_dir = debug_dir
+        if torch.distributed.get_rank()==0 and debug_dir!=None:
+            if not os.path.exists(debug_dir):
+                os.mkdir(debug_dir)
         self.gtvis_range = gtvis_range
         self.vis_count = vis_count
 
@@ -174,7 +179,7 @@ class Detr3D_T(MVXTwoStageDetector):
         img_metas = [each[len_queue-1] for each in img_metas]
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
         if self.debug_name!= None:
-            dir = 'debug/debug_temporal1/'
+            dir = self.debug_dir
             name = str(img_metas[0]['sample_idx'])
             if os.path.exists(dir + name) == False:
                 os.mkdir(dir + name)
@@ -260,7 +265,7 @@ class Detr3D_T(MVXTwoStageDetector):
         if self.debug_name != None:
             # name = str(time.time())
             # breakpoint()
-            dir = 'debug/debug_temporal1/'
+            dir = self.debug_dir
             name = str(img_metas[0]['sample_idx'])
             if os.path.exists(dir + name) == False:
                 os.mkdir(dir + name)

@@ -18,7 +18,7 @@ from projects.mmdet3d_plugin.models.utils.detr3d_transformer import feature_samp
 
 @ATTENTION.register_module()
 class Detr3DCrossAtten_T1v2(BaseModule):
-    """ inference a temporal offset of object"""
+    """ inference a temporal offset of object, no fusion layer"""
 
     def __init__(self,
                  embed_dims=256,
@@ -136,9 +136,9 @@ class Detr3DCrossAtten_T1v2(BaseModule):
             img_metas = [each[i] for each in prev_img_metas]
             img_feats = [each_scale[:, i] for each_scale in prev_img_feat]
             offset = (self.reg_offset(query).sigmoid() - 0.5) * self.offset_size # [-scale/2, scale/2]
-            reference_points_old = reference_points + offset
+            # reference_points_old = reference_points + offset
             _, output_old, mask_old = feature_sampling(
-                img_feats, reference_points_old, self.pc_range, img_metas) #remember to transform lidar2img@t-1
+                img_feats, reference_points, self.pc_range, img_metas) #remember to transform lidar2img@t-1
 
         reference_points_3d, output_now, mask_now = feature_sampling(
                 value, reference_points, self.pc_range, kwargs['img_metas'])

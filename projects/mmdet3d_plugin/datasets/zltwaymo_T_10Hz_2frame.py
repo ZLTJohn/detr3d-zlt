@@ -20,7 +20,7 @@ from .zltvis_temporal import save_temporal_frame
 from .zltwaymo_temporal import CustomWaymoDataset_T
 @DATASETS.register_module()
 class CustomWaymoDataset_T_10Hz_2frame(CustomWaymoDataset_T):
-
+    """test aligned"""
     CLASSES = ('Car', 'Pedestrian', 'Sign', 'Cyclist')
 
     def __init__(self,

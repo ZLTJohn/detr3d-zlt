@@ -20,6 +20,7 @@ import tensorflow as tf
 from glob import glob
 from os.path import join
 from os.path import exists as osp_exists
+import os
 from waymo_open_dataset import label_pb2
 from waymo_open_dataset.protos import metrics_pb2
 from time import time
@@ -88,7 +89,7 @@ class zlt_KITTI2Waymo(object):
             self.gather_tfrecord_info()
         self.tf_infos = mmcv.load(join(self.waymo_tfrecords_dir, 'tf_info_all.pkl'))
         self.time=time()
-        self.error_log = open('debug/kitti2waymo/kitti2waymo_frames_not_found_{}.txt'.format(self.time),'w')
+        self.error_log = None
         self.ERROR=False
         # print(self.waymo_tfrecord_pathnames)
         # print(self.name2idx)
@@ -220,6 +221,10 @@ class zlt_KITTI2Waymo(object):
             if self.ERROR==False:
                 mmcv.dump({'kitti_result':self.kitti_result_files, 'tf_infos': self.tf_infos},
                     'debug/kitti2waymo/kitti2waymo_kittiresult_tfinfos_{}.pkl'.format(self.time))
+                if not osp_exists('debug/kitti2waymo/'):
+                    os.mkdir('debug/kitti2waymo/')
+                self.error_log = open('debug/kitti2waymo/kitti2waymo_frames_not_found_{}.txt'.format(self.time),'w')
+
             self.ERROR = True
             print('{} not found'.format(self.sample_index[i]),file = self.error_log)
             return
