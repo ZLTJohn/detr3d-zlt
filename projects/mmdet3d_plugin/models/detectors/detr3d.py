@@ -40,6 +40,7 @@ class Detr3D(MVXTwoStageDetector):
                              img_backbone, pts_backbone, img_neck, pts_neck,
                              pts_bbox_head, img_roi_head, img_rpn_head,
                              train_cfg, test_cfg, pretrained)
+        # breakpoint()
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         self.use_grid_mask = use_grid_mask
         self.debug_name = debug_name
@@ -69,6 +70,7 @@ class Detr3D(MVXTwoStageDetector):
             return None
         if self.with_img_neck:
             img_feats = self.img_neck(img_feats)
+        ## img_feats == super().extract_img_feat(self,img,img_metas)
         img_feats_reshaped = []
         for img_feat in img_feats:
             BN, C, H, W = img_feat.size()
@@ -100,22 +102,9 @@ class Detr3D(MVXTwoStageDetector):
         Returns:
             dict: Losses of each branch.
         """
-        # print(img_metas[0])
-        # exit(0)
-        breakpoint()
         outs = self.pts_bbox_head(pts_feats, img_metas)
-        # bbox_list = self.pts_bbox_head.get_bboxes(
-        #     outs, img_metas, rescale=False)
-        # import cv2
-        # for i,name in enumerate(img_metas[0]['filename']):
-        #     img = cv2.imread(name)
-        #     cv2.imwrite('debug_target/gt_vis_{}.png'.format(i),img)
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
         losses = self.pts_bbox_head.loss(*loss_inputs)
-        # print(bbox_list)
-        # print(bbox_list[0][2].size())#300
-        # print(losses)
-        # exit(0)
         return losses
 
     @force_fp32(apply_to=('img', 'points'))
@@ -135,58 +124,27 @@ class Detr3D(MVXTwoStageDetector):
             return self.forward_test(**kwargs)
 
     def forward_train(self,
-                      points=None,
-                      img_metas=None,##
-                      gt_bboxes_3d=None,##
-                      gt_labels_3d=None,##
-                      gt_labels=None,
-                      gt_bboxes=None,
-                      img=None,##
-                      proposals=None,
-                      gt_bboxes_ignore=None,
-                      img_depth=None,
-                      img_mask=None):
+                      img_metas,
+                      gt_bboxes_3d,
+                      gt_labels_3d,
+                      img):
         """Forward training function.
         Args:
-            points (list[torch.Tensor], optional): Points of each sample.
-                Defaults to None.
             img_metas (list[dict], optional): Meta information of each sample.
-                Defaults to None.
             gt_bboxes_3d (list[:obj:`BaseInstance3DBoxes`], optional):
-                Ground truth 3D boxes. Defaults to None.
+                Ground truth 3D boxes.
             gt_labels_3d (list[torch.Tensor], optional): Ground truth labels
-                of 3D boxes. Defaults to None.
-            gt_labels (list[torch.Tensor], optional): Ground truth labels
-                of 2D boxes in images. Defaults to None.
-            gt_bboxes (list[torch.Tensor], optional): Ground truth 2D boxes in
-                images. Defaults to None.
+                of 3D boxes.
             img (torch.Tensor optional): Images of each sample with shape
-                (N, C, H, W). Defaults to None.
-            proposals ([list[torch.Tensor], optional): Predicted proposals
-                used for training Fast RCNN. Defaults to None.
-            gt_bboxes_ignore (list[torch.Tensor], optional): Ground truth
-                2D boxes in images to be ignored. Defaults to None.
+                (N, C, H, W).
         Returns:
             dict: Losses of different branches.
         """
-        if self.debug_name!= None:
-            dir = 'debug/visualization/'
-            name = str(img_metas[0]['sample_idx'])
-            if os.path.exists(dir + name) == False:
-                os.mkdir(dir + name)
-            visualize_gt(gt_bboxes_3d, gt_labels_3d, img_metas,
-                    self.debug_name,
-                    dir_name = dir + name,
-                    gtvis_range = self.gtvis_range)
-
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
-        # __ = time.time()
-        # print('  '*2+'extract_feat: ',__-_,'ms')
         losses = dict()
         losses_pts = self.forward_pts_train(img_feats, gt_bboxes_3d,
                                             gt_labels_3d, img_metas,
                                             gt_bboxes_ignore)
-        # print('  '*2+'forward_pts_train: ',time.time()-__,'ms')
         losses.update(losses_pts)
         return losses
     
@@ -197,20 +155,12 @@ class Detr3D(MVXTwoStageDetector):
                     name, type(var)))
         img = [img] if img is None else img
         return self.simple_test(img_metas[0], img[0], **kwargs)
-        # if num_augs == 1:
-        #     img = [img] if img is None else img
-        #     return self.simple_test(None, img_metas[0], img[0], **kwargs)
-        # else:
-        #     return self.aug_test(None, img_metas, img, **kwargs)
 
     def simple_test_pts(self, x, img_metas, rescale=False):
         """Test function of point cloud branch."""
         outs = self.pts_bbox_head(x, img_metas)
         bbox_list = self.pts_bbox_head.get_bboxes(
             outs, img_metas, rescale=rescale)
-        # print(bbox_list)
-        # print(bbox_list[0][2].size())#300
-        # exit(0)
         bbox_results = [
             bbox3d2result(bboxes, scores, labels)       # to CPU
             for bboxes, scores, labels in bbox_list     #for each in batch
@@ -224,46 +174,7 @@ class Detr3D(MVXTwoStageDetector):
         bbox_list = [dict() for i in range(len(img_metas))]
         bbox_pts = self.simple_test_pts(
             img_feats, img_metas, rescale=rescale)
-
-        if self.debug_name != None:
-            # name = str(time.time())
-            # breakpoint()
-            dir = 'debug/visualization/'
-            name = str(img_metas[0]['sample_idx'])
-            if os.path.exists(dir + name) == False:
-                os.mkdir(dir + name)
-            save_bbox_pred(bbox_pts, img, img_metas,
-                    self.debug_name,
-                    dir_name = dir + name, 
-                    vis_count = self.vis_count)
-                
         
         for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
             result_dict['pts_bbox'] = pts_bbox
         return bbox_list    #list of dict of pts_bbox=dict(bboxes scores labels), len()=batch size
-
-    def aug_test_pts(self, feats, img_metas, rescale=False):
-        feats_list = []
-        for j in range(len(feats[0])):
-            feats_list_level = []
-            for i in range(len(feats)):
-                feats_list_level.append(feats[i][j])
-            feats_list.append(torch.stack(feats_list_level, -1).mean(-1))
-        outs = self.pts_bbox_head(feats_list, img_metas)
-        bbox_list = self.pts_bbox_head.get_bboxes(
-            outs, img_metas, rescale=rescale)
-        bbox_results = [
-            bbox3d2result(bboxes, scores, labels)
-            for bboxes, scores, labels in bbox_list
-        ]
-        return bbox_results
-
-    def aug_test(self, img_metas, imgs=None, rescale=False):
-        """Test function with augmentaiton."""
-        img_feats = self.extract_feats(img_metas, imgs)
-        img_metas = img_metas[0]
-        bbox_list = [dict() for i in range(len(img_metas))]
-        bbox_pts = self.aug_test_pts(img_feats, img_metas, rescale)
-        for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
-            result_dict['pts_bbox'] = pts_bbox
-        return bbox_list

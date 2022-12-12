@@ -46,7 +46,6 @@ class Detr3DTransformer(BaseModule):
 
     def __init__(self,
                  num_feature_levels=4,
-                 selected_feature_level=0,
                  num_cams=6,
                  two_stage_num_proposals=300,
                  decoder=None,
@@ -56,8 +55,6 @@ class Detr3DTransformer(BaseModule):
         self.embed_dims = self.decoder.embed_dims
         self.num_feature_levels = num_feature_levels
         self.num_cams = num_cams
-        self.selected_feature_level = selected_feature_level
-        print("self.selected_feature_level:",self.selected_feature_level)
         self.two_stage_num_proposals = two_stage_num_proposals
         self.init_layers()
 
@@ -106,32 +103,16 @@ class Detr3DTransformer(BaseModule):
                 - inter_references_out: The internal value of reference \
                     points in decoder, has shape \
                     (num_dec_layers, bs,num_query, embed_dims)
-                - enc_outputs_class: The classification score of \
-                    proposals generated from \
-                    encoder's feature maps, has shape \
-                    (batch, h*w, num_classes). \
-                    Only would be returned when `as_two_stage` is True, \
-                    otherwise None.
-                - enc_outputs_coord_unact: The regression results \
-                    generated from encoder's feature maps., has shape \
-                    (batch, h*w, 4). Only would \
-                    be returned when `as_two_stage` is True, \
-                    otherwise None.
         """
-        # _=time.time()
         assert query_embed is not None
-        if self.num_feature_levels==1:
-            # breakpoint()
-            mlvl_feats = [mlvl_feats[self.selected_feature_level]]
         bs = mlvl_feats[0].size(0)      #(B, N, C, H, W).
-        query_pos, query = torch.split(query_embed, self.embed_dims , dim=1)#所以positional encoding和query embedding是一样长的 ##[num_query, 2c]
-        query_pos = query_pos.unsqueeze(0).expand(bs, -1, -1)#  复制扩充成[batch_size,num_query,c]
-        query = query.unsqueeze(0).expand(bs, -1, -1)           #同理
-        reference_points = self.reference_points(query_pos)     #从positional encoding 里推出ref point
-        reference_points = reference_points.sigmoid()           #归一化
+        query_pos, query = torch.split(query_embed, self.embed_dims , dim=1)    ##[num_query, c+c]
+        query_pos = query_pos.unsqueeze(0).expand(bs, -1, -1)   #[batch_size,num_query,c]
+        query = query.unsqueeze(0).expand(bs, -1, -1)           #[batch_size,num_query,c]
+        reference_points = self.reference_points(query_pos)
+        reference_points = reference_points.sigmoid()
         init_reference_out = reference_points
-        # __ = time.time()
-        # print('  '*4+'preparation in transformer ',__-_,'ms')
+
         # decoder
         query = query.permute(1, 0, 2)
         query_pos = query_pos.permute(1, 0, 2)
@@ -144,7 +125,6 @@ class Detr3DTransformer(BaseModule):
             reg_branches=reg_branches,
             **kwargs)
 
-        # print('  '*4+'decoder:',time.time()-__,'ms')
         inter_references_out = inter_references
         return inter_states, init_reference_out, inter_references_out
 
@@ -188,17 +168,14 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
         output = query
         intermediate = []
         intermediate_reference_points = []
-        for lid, layer in enumerate(self.layers):
-            # _ = time.time()
+        for lid, layer in enumerate(self.layers):   ## iterative refinement
             reference_points_input = reference_points
-            output = layer(### fucked up in self-attn module
+            output = layer(
                 output,
                 *args,
                 reference_points=reference_points_input,
                 **kwargs)
             output = output.permute(1, 0, 2)
-            # __ = time.time()
-            # print('  '*5+'decoder layer {}:'.format(lid),__-_,'ms')
             if reg_branches is not None:
                 tmp = reg_branches[lid](output)
                 
@@ -209,14 +186,11 @@ class Detr3DTransformerDecoder(TransformerLayerSequence):
                     ..., :2] + inverse_sigmoid(reference_points[..., :2])
                 new_reference_points[..., 2:3] = tmp[
                     ..., 4:5] + inverse_sigmoid(reference_points[..., 2:3])
-                ### reg branch能不断refine ref point，ref point即为box center
                 new_reference_points = new_reference_points.sigmoid()
 
                 reference_points = new_reference_points.detach()    #ref point之间不参与back prop，是不是每层有自己的loss？
-            # pts = load_pts(kwargs['img_metas'])
-            # save_bev(pts, new_reference_points,'debug_refpoint_bev', kwargs['img_metas'][0]['pts_filename'].split('/')[-1]+'_layer{}'.format(lid))
+
             output = output.permute(1, 0, 2)
-            # print('  '*5+'layer post process:',time.time()-__,'ms')
             if self.return_intermediate:
                 intermediate.append(output)
                 intermediate_reference_points.append(reference_points)
@@ -269,7 +243,6 @@ class Detr3DCrossAtten(BaseModule):
         self.init_cfg = init_cfg
         self.dropout = nn.Dropout(dropout)
         self.pc_range = pc_range
-        print('DETR3D CrossAttn pc_range: {}'.format(pc_range))
         # you'd better set dim_per_head to a power of 2
         # which is more efficient in the CUDA implementation
         def _is_power_of_2(n):
@@ -320,10 +293,7 @@ class Detr3DCrossAtten(BaseModule):
                 value,
                 residual=None,
                 query_pos=None,
-                key_padding_mask=None,
                 reference_points=None,
-                spatial_shapes=None,
-                level_start_index=None,
                 **kwargs):
         """Forward Function of Detr3DCrossAtten.
         Args:
@@ -337,8 +307,6 @@ class Detr3DCrossAtten(BaseModule):
                 same shape as `x`. Default None. If None, `x` will be used.
             query_pos (Tensor): The positional encoding for `query`.
                 Default: None.
-            key_pos (Tensor): The positional encoding for `key`. Default
-                None.
             reference_points (Tensor):  The normalized reference
                 points with shape (bs, num_query, 4),
                 all elements is range in [0, 1], top-left (0,0),
@@ -346,18 +314,9 @@ class Detr3DCrossAtten(BaseModule):
                 or (N, Length_{query}, num_levels, 4), add
                 additional two dimensions is (w, h) to
                 form reference boxes.
-            key_padding_mask (Tensor): ByteTensor for `query`, with
-                shape [bs, num_key].
-            spatial_shapes (Tensor): Spatial shape of features in
-                different level. With shape  (num_levels, 2),
-                last dimension represent (h, w).
-            level_start_index (Tensor): The start index of each level.
-                A tensor has shape (num_levels) and can be represented
-                as [0, h_0*w_0, h_0*w_0+h_1*w_1, ...].
         Returns:
              Tensor: forwarded results with shape [num_query, bs, embed_dims].
         """
-        # _0 = time.time()
         if key is None:
             key = query
         if value is None:
@@ -368,18 +327,14 @@ class Detr3DCrossAtten(BaseModule):
         if query_pos is not None:
             query = query + query_pos
 
-        # change to (bs, num_query, embed_dims)
         query = query.permute(1, 0, 2)
 
         bs, num_query, _ = query.size()
 
         attention_weights = self.attention_weights(query).view(
             bs, 1, num_query, self.num_cams, self.num_points, self.num_levels)
-        # _1 = time.time()
         reference_points_3d, output, mask = feature_sampling(
             value, reference_points, self.pc_range, kwargs['img_metas'])
-        # __ = time.time()
-        # print('  '*6+'feature_sampling ',__-_1,'ms')
         output = torch.nan_to_num(output)
         mask = torch.nan_to_num(mask)
         if self.waymo_with_nuscene == True:
@@ -392,7 +347,6 @@ class Detr3DCrossAtten(BaseModule):
         output = self.output_proj(output)#还调整么。。。后面有ffn按理说应该够用了吧？
         # (num_query, bs, embed_dims)
         pos_feat = self.position_encoder(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
-        # print('  '*6+'rest in attn:',time.time()-_0,'ms')
         return self.dropout(output) + inp_residual + pos_feat
 
 
@@ -401,9 +355,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas, return_d
     for img_meta in img_metas:
         lidar2img.append(img_meta['lidar2img'])
     lidar2img = np.asarray(lidar2img)
-    # import hashlib
-    # print(lidar2img[0,0])
-    # print(hashlib.md5(lidar2img[0,0]).hexdigest())
     lidar2img = reference_points.new_tensor(lidar2img) # (B, N, 4, 4)
     reference_points = reference_points.clone()
     reference_points_3d = reference_points.clone()
@@ -428,7 +379,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas, return_d
     mask = (reference_points_cam[..., 2:3] > eps)   #filter out negative depth, B num_c num_q
     reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(  #z for depth, too shallow will cause zero division
         reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)    # eps controls minimum
-    # ref_point_visualize = reference_points_cam.clone()
     #try to normalize to the coordinate in feature map
     if type(img_metas[0]['ori_shape']) == tuple:    
         #same size for all images, nuscene  900*1600,floor to 928*1600
@@ -459,90 +409,7 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas, return_d
         sampled_feats.append(sampled_feat)
     sampled_feats = torch.stack(sampled_feats, -1)
     sampled_feats = sampled_feats.view(B, C, num_query, num_cam,  1, len(mlvl_feats))
-    # import cv2,mmcv
-    # imgs = [mmcv.imread(name) for name in img_metas[0]['filename']]
-    # for i in range(len(imgs)):
-    #     if imgs[i].shape != imgs[0].shape:
-    #         padded = np.zeros(imgs[0].shape)
-    #         padded[:imgs[i].shape[0], :imgs[i].shape[1], :] = imgs[i]
-    #         imgs[i] = padded
-    # exit_cond=1
-    # f = open('debug_image/query_info.txt','w')
-    # for i in range(num_query):
-    #     cnt = torch.sum(maskvis[0, : ,i] == 1)
-    #     if cnt < 0: continue
-    #     f.write(str(cnt)+'\n')
-    #     f.write(str(maskvis[0, : ,i])+'\n')
-    #     exit_cond=1
-    #     color = np.random.randint(256, size=3)
-    #     color = [int(x) for x in color]
-    #     for j in range(num_cam):
-    #         pt = (ref_point_visualize[0,j,i]).cpu().detach().numpy()
-    #         f.write('query {} - cam{}: {} norm: {}\n'.format(i,j,pt,reference_points_cam[0,j,i])) #(B num_c num_q 2)
-    #         f.write(str(maskvis.shape)+'\n')
-    #         f.write(str(ref_point_visualize.shape)+'\n')
-    #         if (maskvis[0,j,i] == 1):
-    #             cv2.circle(imgs[j], (int(pt[0]),int(pt[1])), radius=5 , color = color, thickness = 4)
-    #             cv2.putText(imgs[j], str(i), (int(pt[0]),int(pt[1])),  cv2.FONT_HERSHEY_SIMPLEX, 0.75, color=color)
-    # if exit_cond:
-    #     for i in range(num_cam): 
-    #         mmcv.imwrite(imgs[i], 'debug_image/nuscene_layer1_refpoint_vis_{}.png'.format(i))
-    #     exit(0)
-    # print(img_metas)
     if return_depth == True:
         return reference_points_3d, sampled_feats, mask, refpt_depth
     else:
         return reference_points_3d, sampled_feats, mask
-
-def load_pts(img_metas):
-    path = img_metas[0]['pts_filename']
-    points = np.fromfile(path, dtype=np.float32)
-    dim = 6
-    if path.find('waymo') == -1:
-        dim=5
-    return points.reshape(-1, dim)
-    
-def save_bev(pts , ref, data_root, out_name = None):
-    import time
-    import torchvision.utils as vutils
-    if isinstance(pts, list):
-        pts = pts[0]
-    if isinstance(pts, np.ndarray):
-        pts = torch.from_numpy(pts)
-    pc_range=[-75, -75, -2, 75, 75, 4]
-    mask = ((pts[:, 0] > pc_range[0]) & (pts[:, 0] < pc_range[3]) & 
-        (pts[:, 1] > pc_range[1]) & (pts[:, 1] < pc_range[4]) &
-        (pts[:, 2] > pc_range[2]) & (pts[:, 2] < pc_range[5]))
-    pts = pts[mask]
-    res = 0.1
-    x_max = 1 + int((pc_range[3] - pc_range[0]) / res)
-    y_max = 1 + int((pc_range[4] - pc_range[1]) / res)
-    im = torch.zeros(x_max+1, y_max+1, 3)
-    x_img = (pts[:, 0] - pc_range[0]) / res
-    x_img = x_img.round().long()
-    y_img = (pts[:, 1] - pc_range[1]) / res
-    y_img = y_img.round().long()
-    im[x_img, y_img, :] = 1
-
-    for i in [-1, 0, 1]:
-        for j in [-1, 0, 1]:
-            im[(x_img.long()+i).clamp(min=0, max=x_max), 
-                (y_img.long()+j).clamp(min=0, max=y_max), :] = 1
-    print('reference', ref.size())
-    ref_pts_x = (ref[..., 0] * (pc_range[3] - pc_range[0]) / res).round().long()
-    ref_pts_y = (ref[..., 1] * (pc_range[4] - pc_range[1]) / res).round().long()
-    for i in [-2, 0, 2]:
-        for j in [-2, 0, 2]:
-            im[(ref_pts_x.long()+i).clamp(min=0, max=x_max), 
-                (ref_pts_y.long()+j).clamp(min=0, max=y_max), 0] = 1
-            im[(ref_pts_x.long()+i).clamp(min=0, max=x_max), 
-                (ref_pts_y.long()+j).clamp(min=0, max=y_max), 1:2] = 0
-    im = im.permute(2, 0, 1)
-    timestamp = str(time.time())
-    print(timestamp)
-    # saved_root = '/home/chenxy/mmdetection3d/'
-    if out_name == None:
-        out_name = data_root + '/' + timestamp + '.jpg'
-    else :
-        out_name = data_root + '/' + out_name + '.jpg'
-    vutils.save_image(im, out_name)

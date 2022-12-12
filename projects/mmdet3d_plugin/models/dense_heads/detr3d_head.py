@@ -32,27 +32,22 @@ class Detr3DHead(DETRHead):
                  transformer=None,
                  bbox_coder=None,
                  num_cls_fcs=2,
-                 code_weights=None,
+                 code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2], ## origin for nus
+                 code_size = 10,
                  **kwargs):
         self.with_box_refine = with_box_refine
         self.as_two_stage = as_two_stage
         if self.as_two_stage:
-            transformer['as_two_stage'] = self.as_two_stage
-        if 'code_size' in kwargs:
-            self.code_size = kwargs['code_size']
-        else:
-            self.code_size = 10
-        if code_weights is not None:
-            self.code_weights = code_weights
-        else:
-            self.code_weights = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2]
-        
+            transformer['as_two_stage'] = self.as_two_stage        
+        self.code_size = code_size
+        self.code_weights = code_weights
+
         self.bbox_coder = build_bbox_coder(bbox_coder)
         self.pc_range = self.bbox_coder.pc_range
-        # print('DETR3D HEAD pc_range: {}'.format(self.pc_range))
         self.num_cls_fcs = num_cls_fcs - 1  #？？？这不就没用了么...
         super(Detr3DHead, self).__init__(
             *args, transformer=transformer, **kwargs)
+
         self.code_weights = nn.Parameter(torch.tensor(
             self.code_weights, requires_grad=False), requires_grad=False)
 
@@ -119,8 +114,6 @@ class Detr3DHead(DETRHead):
         """         ###为什么是theta，不是costheta sintheta么？？
 
         query_embeds = self.query_embedding.weight
-        # import time
-        # _=time.time()
         hs, init_reference, inter_references = self.transformer(
             mlvl_feats,
             query_embeds,
@@ -128,8 +121,6 @@ class Detr3DHead(DETRHead):
             img_metas=img_metas,
             **kwargs
         )
-        # __ = time.time()
-        # print('  '*3+'transformer: ',__-_,'ms')
         hs = hs.permute(0, 2, 1, 3)#what is this
         outputs_classes = []
         outputs_coords = []
@@ -314,16 +305,6 @@ class Detr3DHead(DETRHead):
         num_imgs = cls_scores.size(0)#batch size
         cls_scores_list = [cls_scores[i] for i in range(num_imgs)]
         bbox_preds_list = [bbox_preds[i] for i in range(num_imgs)]#tensor to list of tensor
-        # print(cls_scores.size())
-        # print(bbox_preds.size())
-        # print(cls_scores_list)
-        # print(bbox_preds_list)
-        # print(gt_labels_list)
-        # print(gt_bboxes_list)
-        # print(gt_bboxes_ignore_list)
-        # open('debug_target/nuscene_gt_bboxes_list.txt','w').write(str(gt_bboxes_list))
-        # open('debug_target/nuscene_gt_labels_list.txt','w').write(str(gt_labels_list))
-        # exit(0)
         cls_reg_targets = self.get_targets(cls_scores_list, bbox_preds_list,
                                            gt_bboxes_list, gt_labels_list, 
                                            gt_bboxes_ignore_list)
@@ -339,15 +320,11 @@ class Detr3DHead(DETRHead):
         # construct weighted avg_factor to match with the official DETR repo
         cls_avg_factor = num_total_pos * 1.0 + \
             num_total_neg * self.bg_cls_weight
-        # print(self.bg_cls_weight)# 0
-        # print(cls_avg_factor)# 9
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
                 cls_scores.new_tensor([cls_avg_factor]))
 
         cls_avg_factor = max(cls_avg_factor, 1)
-        # print('cls score:{}'.format(cls_scores))
-        # print('labels:{}'.format(labels))
         loss_cls = self.loss_cls(
             cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
         # weights is query-wise 用于为每个query的loss加权，加权后统计loss和，然后用avg_factor除一下。
@@ -362,27 +339,11 @@ class Detr3DHead(DETRHead):
         isnotnan = torch.isfinite(normalized_bbox_targets).all(dim=-1)      #neg_query is all 0, log(0) is NaN
         bbox_weights = bbox_weights * self.code_weights
 
-        # open('debug_target/nuscene_bbox_preds.txt','w').write(str(bbox_preds))
-        # with open('debug_target/nuscene_normalized_bbox_targets.txt','w') as f:
-        #     for i in range(len(normalized_bbox_targets)):
-        #         if isnotnan[i]:
-        #             f.write('query {} got target:\n'.format(i))
-        #             f.write('bbox preds & gtbox target:\n{}\n{}\n'.format(bbox_preds[i], normalized_bbox_targets[i]))
-        #             f.write('cls score & labels:\n{}\n{}\n'.format(cls_scores[i], labels[i]))
-        # if (any(isnotnan) == 1):
-        #     exit(0)
         loss_bbox = self.loss_bbox(
                 bbox_preds[isnotnan, :self.code_size], normalized_bbox_targets[isnotnan, :self.code_size], bbox_weights[isnotnan, :self.code_size], avg_factor=num_total_pos)
 
         loss_cls = torch.nan_to_num(loss_cls)
         loss_bbox = torch.nan_to_num(loss_bbox)
-        # print(cls_scores.sigmoid()[isnotnan,:][:5])
-        # print(labels[isnotnan][:5])
-        # print(bbox_preds[isnotnan, :self.code_size][:5])
-        # print(normalized_bbox_targets[isnotnan, :self.code_size][:5])
-        # print('loss cls:{}\nloss reg:{}'.format(loss_cls, loss_bbox))
-        # print(bbox_weights[isnotnan, :self.code_size])
-        # exit(0)
         return loss_cls, loss_bbox
 
     @force_fp32(apply_to=('preds_dicts'))
@@ -391,10 +352,6 @@ class Detr3DHead(DETRHead):
              gt_labels_list,
              preds_dicts,
              gt_bboxes_ignore=None):
-        # open('debug_target/nuscene_gtbox_list.txt','w').write(str(gt_bboxes_list))
-        # open('debug_target/nuscene_gt_labels_list.txt','w').write(str(gt_labels_list))
-        # open('debug_target/nuscene_preds_dicts.txt','w').write(str(preds_dicts))
-        # exit(0)
         """"Loss function.
         Args:
             
@@ -433,12 +390,6 @@ class Detr3DHead(DETRHead):
 
         num_dec_layers = len(all_cls_scores)
         device = gt_labels_list[0].device
-        # print(num_dec_layers)  # 6
-        # print(gt_labels_list[0])  # shape [num_box,1]
-        # print(gt_bboxes_list[0].gravity_center)   # bottom center +z_size//2
-        # print(gt_bboxes_list[0].tensor)   #[num_box, 7],each row is[ bottom center(x,y,z) + x_size y_size z_size yaw ]
-        # then we broadcast it to every decoder layer
-        # print('gt list len: {}'.format(len(gt_bboxes_list)))
         gt_bboxes_list = [torch.cat(
             (gt_bboxes.gravity_center, gt_bboxes.tensor[:, 3:]),        # turn bottm center into gravity center, key step
             dim=1).to(device) for gt_bboxes in gt_bboxes_list]
@@ -479,8 +430,6 @@ class Detr3DHead(DETRHead):
             loss_dict[f'd{num_dec_layer}.loss_cls'] = loss_cls_i
             loss_dict[f'd{num_dec_layer}.loss_bbox'] = loss_bbox_i
             num_dec_layer += 1
-        # print(loss_dict)
-        # exit(0)
         return loss_dict
 
     @force_fp32(apply_to=('preds_dicts'))

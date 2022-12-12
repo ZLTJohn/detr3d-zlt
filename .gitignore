@@ -140,3 +140,4 @@ projects/configs/test_lr_waymo/test_lr_detr3d_waymo_fcos3d++.py
 mmdetection3d
 debug
 2022-11-3-debug_temp.txt
+pyrightconfig.json
