@@ -61,7 +61,6 @@ class Detr3D_T_test_align(Detr3D_T):
         bbox_pts = self.simple_test_pts(
             img_feats, img_metas, rescale, 
             prev_img_feat, prev_img_metas)
-        
         if self.debug_name != None:
             # name = str(time.time())
             # breakpoint()

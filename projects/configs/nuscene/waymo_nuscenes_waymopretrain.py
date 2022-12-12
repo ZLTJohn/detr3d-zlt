@@ -8,7 +8,7 @@ plugin_dir='projects/mmdet3d_plugin/'
 # load_from = 'ckpts/fcos3d_yue.pth'
 # load_from = 'ckpts/waymo_pretrain_pgd_mv_8gpu_for_detr3d_backbone_statedict_only.pth'
 load_from = 'ckpts/waymo_pretrain_fullres_pgd_mv_8gpu_for_detr3d_backbone_statedict_only.pth'
-# resume_from = '/home/zhenglt/pure-detr3d/work_dirs/waymo_nuscenes/epoch_1.pth'
+resume_from = '/home/zhenglt/pure-detr3d/work_dirs/waymo_nuscenes_waymopretrain/epoch_5.pth'
 
 point_cloud_range = [-35, -75, -2, 75, 75, 4]
 voxel_size = [0.5, 0.5, 6]
