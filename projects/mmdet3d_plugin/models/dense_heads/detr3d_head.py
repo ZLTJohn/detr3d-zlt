@@ -140,16 +140,10 @@ class Detr3DHead(DETRHead):
             tmp[..., 0:2] = tmp[..., 0:2].sigmoid()
             tmp[..., 4:5] += reference[..., 2:3]
             tmp[..., 4:5] = tmp[..., 4:5].sigmoid()
-            if self.pc_range[-1] == 'polar_coordinates':
-                thetas = (tmp[..., 0:1] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0])
-                radii =  (tmp[..., 1:2] * (self.pc_range[4] - self.pc_range[1]) + self.pc_range[1])
-                tmp[..., 0:1] = torch.cos(thetas) * radii
-                tmp[..., 1:2] = torch.sin(thetas) * radii
-                tmp[..., 4:5] = (tmp[..., 4:5] * (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2])
-            else:
-                tmp[..., 0:1] = (tmp[..., 0:1] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0])
-                tmp[..., 1:2] = (tmp[..., 1:2] * (self.pc_range[4] - self.pc_range[1]) + self.pc_range[1])
-                tmp[..., 4:5] = (tmp[..., 4:5] * (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2])
+
+            tmp[..., 0:1] = (tmp[..., 0:1] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0])
+            tmp[..., 1:2] = (tmp[..., 1:2] * (self.pc_range[4] - self.pc_range[1]) + self.pc_range[1])
+            tmp[..., 4:5] = (tmp[..., 4:5] * (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2])
 
             # TODO: check if using sigmoid
             outputs_coord = tmp

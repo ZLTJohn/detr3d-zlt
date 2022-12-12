@@ -350,66 +350,60 @@ class Detr3DCrossAtten(BaseModule):
         return self.dropout(output) + inp_residual + pos_feat
 
 
-def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas, return_depth=False):
-    lidar2img = []
-    for img_meta in img_metas:
-        lidar2img.append(img_meta['lidar2img'])
+def feature_sampling(mlvl_feats, ref_pt, pc_range, img_metas, return_depth=False):
+    # breakpoint()
+    lidar2img = [meta['lidar2img'] for meta in img_metas]
     lidar2img = np.asarray(lidar2img)
-    lidar2img = reference_points.new_tensor(lidar2img) # (B, N, 4, 4)
-    reference_points = reference_points.clone()
-    reference_points_3d = reference_points.clone()
-    if pc_range[-1] == 'polar_coordinates':
-        thetas = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
-        radii =  reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
-        reference_points[..., 0:1] = torch.cos(thetas) * radii
-        reference_points[..., 1:2] = torch.sin(thetas) * radii
-        reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
-    else:
-        reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
-        reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
-        reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
-    # reference_points (B, num_queries, 4) ，to homogeneous coordinate
-    reference_points = torch.cat((reference_points, torch.ones_like(reference_points[..., :1])), -1)
-    B, num_query = reference_points.size()[:2]
-    num_cam = lidar2img.size(1)
-    reference_points = reference_points.view(B, 1, num_query, 4).repeat(1, num_cam, 1, 1).unsqueeze(-1)##B num_c num_q 4 ,1
-    lidar2img = lidar2img.view(B, num_cam, 1, 4, 4).repeat(1, 1, num_query, 1, 1)   # B num_c num_q 4 4
-    reference_points_cam = torch.matmul(lidar2img, reference_points).squeeze(-1)    # B num_c num_q 4
-    eps = 1e-5
-    mask = (reference_points_cam[..., 2:3] > eps)   #filter out negative depth, B num_c num_q
-    reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(  #z for depth, too shallow will cause zero division
-        reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)    # eps controls minimum
-    #try to normalize to the coordinate in feature map
-    if type(img_metas[0]['ori_shape']) == tuple:    
-        #same size for all images, nuscene  900*1600,floor to 928*1600
-        reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
-        reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
-    else:   
-        #diff size,1280*1920 and 886*1920, waymo, get it to the normorlized point, floor 886 to 896 to meet divisor 32, 
-        # which is 0.7 out of 1 against 1280, that is to say, the remaining 30% is padding
-        reference_points_cam[..., 0] /= img_metas[0]['ori_shape'][0][1]
-        reference_points_cam[..., 1] /= img_metas[0]['ori_shape'][0][0]
-        mask[:, 3:5, :] &= (reference_points_cam[:, 3:5, :, 1:2] < 0.7)
+    lidar2img = ref_pt.new_tensor(lidar2img)                                        # (B, N, 4, 4)
+    ref_pt = ref_pt.clone()
+    ref_pt_3d = ref_pt.clone()
 
-    reference_points_cam = (reference_points_cam - 0.5) * 2     #0~1 to -1~1
-    mask = (mask & (reference_points_cam[..., 0:1] > -1.0)  #we should change the criteria for waymo cam 3~4
-                 & (reference_points_cam[..., 0:1] < 1.0)   # which is -1~0.4
-                 & (reference_points_cam[..., 1:2] > -1.0) 
-                 & (reference_points_cam[..., 1:2] < 1.0))
-    # maskvis = mask.clone()
-    mask = mask.view(B, num_cam, 1, num_query, 1, 1).permute(0, 2, 3, 1, 4, 5)
+    B, num_query = ref_pt.size()[:2]
+    num_cam = lidar2img.size(1)
+    eps = 1e-5 
+
+    ref_pt[..., 0:1] = ref_pt[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]   #x
+    ref_pt[..., 1:2] = ref_pt[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]   #y
+    ref_pt[..., 2:3] = ref_pt[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]   #z
+
+    ref_pt = torch.cat((ref_pt, torch.ones_like(ref_pt[..., :1])), -1)              #B num_q   4
+    ref_pt = ref_pt.view(B, 1, num_query, 4)                                        #B 1       num_q 4
+    ref_pt = ref_pt.repeat(1, num_cam, 1, 1).unsqueeze(-1)                          #B num_cam num_q 4 1
+    lidar2img = lidar2img.view(B, num_cam, 1, 4, 4).repeat(1, 1, num_query, 1, 1)   #B num_cam num_q 4 4
+    pt_cam = torch.matmul(lidar2img, ref_pt).squeeze(-1)                            #B num_cam num_q 4 
+    
+    z = pt_cam[..., 2:3]
+    eps = eps * torch.ones_like(z)
+    mask = (z > eps)                                                                #B num_c num_q
+    pt_cam = pt_cam[..., 0:2] / torch.maximum(z,eps)    # eps controls minimum
+    if type(img_metas[0]['ori_shape']) == tuple:        #??? new version may bugged !!!
+        (h,w,_) = img_metas[0]['img_shape'][0]          #padded nuscene image: 928*1600
+        pt_cam[..., 0] /= w
+        pt_cam[..., 1] /= h
+    else:                                           
+        (h,w,_) = img_metas[0]['ori_shape'][0]          #waymo image
+        pt_cam[..., 0] /= w                             #cam0~2: 1280*1920
+        pt_cam[..., 1] /= h                             #cam3~4: 886 *1920 padded to 1280*1920
+        mask[:, 3:5, :] &= (pt_cam[:, 3:5, :, 1:2] < 0.7) #filter pt_cam_y > 886
+
+    mask = (mask & (pt_cam[..., 0:1] > 0.0)
+                 & (pt_cam[..., 0:1] < 1.0)
+                 & (pt_cam[..., 1:2] > 0.0) 
+                 & (pt_cam[..., 1:2] < 1.0))
+    mask = mask.view(B, num_cam, 1, num_query, 1, 1).permute(0, 2, 3, 1, 4, 5)      #B 1 num_q num_cam 1 1
     mask = torch.nan_to_num(mask)
+
+    pt_cam = (pt_cam - 0.5) * 2                         #0~1 to -1~1 to do grid_sample
     sampled_feats = []
     for lvl, feat in enumerate(mlvl_feats):
         B, N, C, H, W = feat.size()
         feat = feat.view(B*N, C, H, W)
-        reference_points_cam_lvl = reference_points_cam.view(B*N, num_query, 1, 2)
-        sampled_feat = F.grid_sample(feat, reference_points_cam_lvl)
-        sampled_feat = sampled_feat.view(B, N, C, num_query, 1).permute(0, 2, 3, 1, 4)
+        pt_cam_lvl = pt_cam.view(B*N, num_query, 1, 2)
+        sampled_feat = F.grid_sample(feat, pt_cam_lvl)
+        sampled_feat = sampled_feat.view(B, N, C, num_query, 1)
+        sampled_feat = sampled_feat.permute(0, 2, 3, 1, 4)                          #B C num_q num_cam 1
         sampled_feats.append(sampled_feat)
-    sampled_feats = torch.stack(sampled_feats, -1)
+
+    sampled_feats = torch.stack(sampled_feats, -1)                                  #B C num_q num_cam fpn_lvl
     sampled_feats = sampled_feats.view(B, C, num_query, num_cam,  1, len(mlvl_feats))
-    if return_depth == True:
-        return reference_points_3d, sampled_feats, mask, refpt_depth
-    else:
-        return reference_points_3d, sampled_feats, mask
+    return ref_pt_3d, sampled_feats, mask
