@@ -10,6 +10,8 @@ from .detr3d_transformer_temporal1_ver1_1 import Detr3DCrossAtten_T1v1_1, Positi
 from .detr3d_transformer_temporal1_ver1_1_1 import Detr3DCrossAtten_T1v1_1_1
 from .detr3d_transformer_temporal1_ver3_emb_on_imgfeat import Detr3DTransformer_T1v3, Detr3DCrossAtten_T1v3
 from .detr3d_depth_aware_cross_attn import Detr3DTransformer_depth, Detr3DCrossAtten_depth
+from .detr3d_transformer_temporal3 import Detr3DCrossAtten_T3
+from .detr3d_transformer_temporal_new import Detr3DCrossAtten_Tx
 # __all__ = ['DGCNNAttn', 'Deformable3DDetrTransformerDecoder', 
 #            'Detr3DTransformer', 'Detr3DTransformerDecoder', 'Detr3DCrossAtten',#    'Detr3DTransformer_T', 'Detr3DTransformerDecoder_T', 
 #            'Detr3DCrossAtten_T',

@@ -226,8 +226,12 @@ class Detr3DHead(DETRHead):
         bbox_targets = torch.zeros_like(bbox_pred)[..., :self.code_size-1]#theta in gt_bbox here is still a single scalar
         bbox_weights = torch.zeros_like(bbox_pred)
         bbox_weights[pos_inds] = 1.0        #only matched query will learn from bbox coord
-
+        # if (gt_labels.shape[0]==0):
+        #     breakpoint()
         # DETR
+        if sampling_result.pos_gt_bboxes.shape[0]==0: #fix empty gt bug in multi gpu training
+            sampling_result.pos_gt_bboxes = sampling_result.pos_gt_bboxes.reshape(0,self.code_size-1)
+
         bbox_targets[pos_inds] = sampling_result.pos_gt_bboxes
         return (labels, label_weights, bbox_targets, bbox_weights, 
                 pos_inds, neg_inds)

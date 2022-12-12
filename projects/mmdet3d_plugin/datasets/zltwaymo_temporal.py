@@ -25,11 +25,12 @@ class CustomWaymoDataset_T(CustomWaymoDataset):
 
     def __init__(self,
                  *args,
-                 history_len = 1, skip_len = 0,
+                 history_len = 1, skip_len = 0, load_prev_gt = False,
                  **kwargs):
         super().__init__(*args, **kwargs)
         self.history_len = history_len
         self.skip_len = skip_len
+        self.load_prev_gt = load_prev_gt
 
     def __getitem__(self, idx):
         if self.test_mode:
@@ -90,6 +91,12 @@ class CustomWaymoDataset_T(CustomWaymoDataset):
         queue[-1]['img'] = DC(torch.stack(imgs_list),
                               cpu_only=False, stack=True)
         queue[-1]['img_metas'] = DC(metas_map, cpu_only=True)
+        # breakpoint()
+        if self.load_prev_gt == True and self.test_mode==False:
+            gtbox_list = [each['gt_bboxes_3d'].data for each in queue]
+            gtlabel_list = [each['gt_labels_3d'].data for each in queue]
+            queue[-1]['gt_bboxes_3d'] = DC(gtbox_list,cpu_only=True)
+            queue[-1]['gt_labels_3d'] = DC(gtlabel_list,cpu_only=True)
         queue = queue[-1]
         # breakpoint()
         # save_temporal_frame(queue)

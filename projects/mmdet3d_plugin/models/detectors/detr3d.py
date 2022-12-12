@@ -102,6 +102,7 @@ class Detr3D(MVXTwoStageDetector):
         """
         # print(img_metas[0])
         # exit(0)
+        breakpoint()
         outs = self.pts_bbox_head(pts_feats, img_metas)
         # bbox_list = self.pts_bbox_head.get_bboxes(
         #     outs, img_metas, rescale=False)

@@ -10,7 +10,9 @@ from PIL import Image
 from PIL import ImageFont
 from PIL import ImageDraw 
 import random
-
+'''
+forget to transform the coordinate of previous frame 3d box centers
+'''
 def visualize_gt(gt_bboxes_3d=None, gt_labels_3d=None, img_metas = None, name = None, dir_name = 'debug', gtvis_range = [0,105]):#labels not utilized
     if name == None:
         name = str(time.time())
@@ -64,11 +66,13 @@ def save_bbox2img(img, gt_bboxes_3d, img_metas, dirname='debug_coord', name = No
     if type(img_metas[0]['ori_shape']) == tuple:    
         reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
         reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
+        img_size=img_metas[0]['img_shape'][0]
     else:
         #diff size,1280*1920 and 886*1920, waymo, get it to the normorlized point, floor 886 to 896 to meet divisor 32, 
         # which is 0.7 out of 1 against 1280, that is to say, the remaining 30% is padding
         reference_points_cam[..., 0] /= img_metas[0]['ori_shape'][0][1]
         reference_points_cam[..., 1] /= img_metas[0]['ori_shape'][0][0]
+        img_size=img_metas[0]['ori_shape'][0]
         print(img_metas[0]['ori_shape'])
         mask[:, 3:5, :] &= (reference_points_cam[:, 3:5, :, 1:2] < 0.7)
 
@@ -82,7 +86,7 @@ def save_bbox2img(img, gt_bboxes_3d, img_metas, dirname='debug_coord', name = No
         name = str(time.time())
     for i in range(num_cam):
         img_out = cv2.imread(img_metas[0]['filename'][i])
-        h,w,_ = img_metas[0]['ori_shape'][0]#img_out.shape
+        h,w,_ = img_size
         print(h,w)
 
         for j in range(num_query):

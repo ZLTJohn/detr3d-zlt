@@ -49,11 +49,13 @@ def save_bbox2img(img, gt_bboxes_3d, img_metas, img_filenames, dirname='debug_co
         #same size for all images, nuscene  900*1600,floor to 928*1600
         reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
         reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
+        img_size=img_metas[0]['img_shape'][0]
     else:
         #diff size,1280*1920 and 886*1920, waymo, get it to the normorlized point, floor 886 to 896 to meet divisor 32, 
         # which is 0.7 out of 1 against 1280, that is to say, the remaining 30% is padding
         reference_points_cam[..., 0] /= img_metas[0]['ori_shape'][0][1]
         reference_points_cam[..., 1] /= img_metas[0]['ori_shape'][0][0]
+        img_size=img_metas[0]['ori_shape'][0]
 #         print(img_metas[0]['ori_shape'])
         mask[:, 3:5, :] &= (reference_points_cam[:, 3:5, :, 1:2] < 0.7)
 
@@ -71,7 +73,7 @@ def save_bbox2img(img, gt_bboxes_3d, img_metas, img_filenames, dirname='debug_co
 #         img_out = np.array(img[0][i].permute(1,2,0).detach().cpu())
 #         h,w,_ = img_out.shape
         img_out = cv2.imread(img_filenames[i])    #'/home/zhengliangtao/'+
-        h,w,_ = img_metas[0]['ori_shape'][0]
+        h,w,_ = img_size
 #         print(h,w)
         for j in range(num_query):
             pt = reference_points_cam[0,i,j]
@@ -92,7 +94,7 @@ def show_camera_image(camera_image, layout):
   plt.axis('off')
   return ax
 
-def save_temporal_frame(union, dirname='debug/debug_temporal1'):
+def save_temporal_frame(union, dirname='debug/debug_temporal1', ds_name='waymo'):
     # union = np.load('queue_union.npy',allow_pickle=True).reshape(1)[0]
     gt = union['gt_bboxes_3d'].data
     imgs = union['img'].data
@@ -105,7 +107,7 @@ def save_temporal_frame(union, dirname='debug/debug_temporal1'):
                 dirname= dirname, name = name+'_prev', colors = colors)
     plt.figure(figsize=(40, 60))    
     for i,img_out in enumerate(out0):
-        show_camera_image(img_out[...,::-1], [5, 2, i*2+1])
+        show_camera_image(img_out[...,::-1], [6, 2, i*2+1])
     for i,img_out in enumerate(out1):
-        show_camera_image(img_out[...,::-1], [5, 2, i*2+2])
-    plt.savefig(dirname+'/{}_{}_all.png'.format('waymo',name))
+        show_camera_image(img_out[...,::-1], [6, 2, i*2+2])
+    plt.savefig(dirname+'/{}_{}_all.png'.format(ds_name,name))
