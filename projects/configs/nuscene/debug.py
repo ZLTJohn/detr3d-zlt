@@ -8,14 +8,15 @@ plugin_dir='projects/mmdet3d_plugin/'
 
 # If point cloud range is changed, the models should also change their point
 # cloud range accordingly
-point_cloud_range = [-35, -75, -2, 75, 75, 4]
-voxel_size = [0.5, 0.5, 6]
+point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+voxel_size = [0.2, 0.2, 8]
+
 img_norm_cfg = dict(
-    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
+    mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
 # For nuScenes we usually do 10-class detection
 class_names = [
-    'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 
-    'motorcycle', 'bicycle', 'pedestrian',
+    'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',
+    'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
 ]
 
 input_modality = dict(
@@ -25,7 +26,6 @@ input_modality = dict(
     use_map=False,
     use_external=False)
 
-
 model = dict(
     type='Detr3D',
     use_grid_mask=True,
@@ -33,7 +33,6 @@ model = dict(
         type='ResNet',
         depth=101,
         num_stages=4,
-        with_cp=True,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
         norm_cfg=dict(type='BN2d', requires_grad=False),
@@ -52,16 +51,13 @@ model = dict(
     pts_bbox_head=dict(
         type='Detr3DHead',
         num_query=900,
-        num_classes=3,
+        num_classes=10,
         in_channels=256,
-        code_size=8,    #we don't infer velocity here, but infer(x,y,z,w,h,l,sin(θ),cos(θ)) for bboxes
-        code_weights = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], #specify the weights since default length is 10
         sync_cls_avg_factor=True,
         with_box_refine=True,
         as_two_stage=False,
         transformer=dict(
             type='Detr3DTransformer',
-            num_cams = 6,
             decoder=dict(
                 type='Detr3DTransformerDecoder',
                 num_layers=6,
@@ -77,8 +73,6 @@ model = dict(
                         dict(
                             type='Detr3DCrossAtten',
                             pc_range=point_cloud_range,
-                            num_cams = 6,
-                            waymo_with_nuscene = True,#align cams   
                             num_points=1,
                             embed_dims=256)
                     ],
@@ -88,11 +82,11 @@ model = dict(
                                      'ffn', 'norm')))),
         bbox_coder=dict(
             type='NMSFreeCoder',
-            post_center_range=point_cloud_range,
+            post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
             pc_range=point_cloud_range,
             max_num=300,
             voxel_size=voxel_size,
-            num_classes=3), 
+            num_classes=10), 
         positional_encoding=dict(
             type='SinePositionalEncoding',
             num_feats=128,
@@ -124,6 +118,42 @@ data_root = 'data/nuscenes/'
 
 file_client_args = dict(backend='disk')
 
+db_sampler = dict(
+    data_root=data_root,
+    info_path=data_root + 'nuscenes_dbinfos_train.pkl',
+    rate=1.0,
+    prepare=dict(
+        filter_by_difficulty=[-1],
+        filter_by_min_points=dict(
+            car=5,
+            truck=5,
+            bus=5,
+            trailer=5,
+            construction_vehicle=5,
+            traffic_cone=5,
+            barrier=5,
+            motorcycle=5,
+            bicycle=5,
+            pedestrian=5)),
+    classes=class_names,
+    sample_groups=dict(
+        car=2,
+        truck=3,
+        construction_vehicle=7,
+        bus=4,
+        trailer=6,
+        barrier=2,
+        motorcycle=6,
+        bicycle=6,
+        pedestrian=2,
+        traffic_cone=2),
+    points_loader=dict(
+        type='LoadPointsFromFile',
+        coord_type='LIDAR',
+        load_dim=5,
+        use_dim=[0, 1, 2, 3, 4],
+        file_client_args=file_client_args))
+
 train_pipeline = [
     dict(type='LoadMultiViewImageFromFiles', to_float32=True),
     # dict(type='MyResize',img_scale=1/4), #unknown error: import failed
@@ -131,7 +161,6 @@ train_pipeline = [
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True, with_attr_label=False),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
-    dict(type='ProjectLabelToWaymoClass', class_names = class_names),
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
     dict(type='PadMultiViewImage', size_divisor=32),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
@@ -158,7 +187,7 @@ test_pipeline = [
 
 data = dict(
     samples_per_gpu=1,
-    workers_per_gpu=0,
+    workers_per_gpu=4,
     train=dict(
         type=dataset_type,
         data_root=data_root,
@@ -192,7 +221,7 @@ lr_config = dict(
     min_lr_ratio=1e-3)
 total_epochs = 24
 evaluation = dict(interval=2, pipeline=test_pipeline)
-checkpoint_config = dict(interval=1, max_keep_ckpts=4)
+checkpoint_config = dict(interval=1, max_keep_ckpts=1)
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
 # load_from='/home/chenxuanyao/checkpoint/fcos3d_detr3d.pth'
 load_from = 'ckpts/fcos3d_yue.pth'
