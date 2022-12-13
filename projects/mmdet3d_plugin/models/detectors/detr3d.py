@@ -87,8 +87,7 @@ class Detr3D(MVXTwoStageDetector):
                           pts_feats,
                           gt_bboxes_3d,
                           gt_labels_3d,
-                          img_metas,
-                          gt_bboxes_ignore=None):
+                          img_metas):
         """Forward function for point cloud branch.
         Args:
             pts_feats (list[torch.Tensor]): Features of point cloud branch
@@ -143,8 +142,7 @@ class Detr3D(MVXTwoStageDetector):
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
         losses = dict()
         losses_pts = self.forward_pts_train(img_feats, gt_bboxes_3d,
-                                            gt_labels_3d, img_metas,
-                                            gt_bboxes_ignore)
+                                            gt_labels_3d, img_metas)
         losses.update(losses_pts)
         return losses
     
