@@ -141,3 +141,4 @@ mmdetection3d
 debug
 2022-11-3-debug_temp.txt
 pyrightconfig.json
+projects/mmdet3d_plugin/models/detectors/detr3d_debug.py
