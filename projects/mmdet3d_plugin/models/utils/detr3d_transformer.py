@@ -363,38 +363,32 @@ def feature_sampling(mlvl_feats, ref_pt, pc_range, img_metas, return_depth=False
     num_cam = lidar2img.size(1)
     eps = 1e-5 
 
-    ref_pt[..., 0:1] = ref_pt[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]   #x
-    ref_pt[..., 1:2] = ref_pt[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]   #y
-    ref_pt[..., 2:3] = ref_pt[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]   #z
+    ref_pt[..., 0:1] = ref_pt[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]   # x
+    ref_pt[..., 1:2] = ref_pt[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]   # y
+    ref_pt[..., 2:3] = ref_pt[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]   # z
 
-    ref_pt = torch.cat((ref_pt, torch.ones_like(ref_pt[..., :1])), -1)              #B num_q   4
-    ref_pt = ref_pt.view(B, 1, num_query, 4)                                        #B 1       num_q 4
-    ref_pt = ref_pt.repeat(1, num_cam, 1, 1).unsqueeze(-1)                          #B num_cam num_q 4 1
-    lidar2img = lidar2img.view(B, num_cam, 1, 4, 4).repeat(1, 1, num_query, 1, 1)   #B num_cam num_q 4 4
-    pt_cam = torch.matmul(lidar2img, ref_pt).squeeze(-1)                            #B num_cam num_q 4 
+    ref_pt = torch.cat((ref_pt, torch.ones_like(ref_pt[..., :1])), -1)              # B num_q   4
+    ref_pt = ref_pt.view(B, 1, num_query, 4)                                        # B 1       num_q 4
+    ref_pt = ref_pt.repeat(1, num_cam, 1, 1).unsqueeze(-1)                          # B num_cam num_q 4 1
+    lidar2img = lidar2img.view(B, num_cam, 1, 4, 4).repeat(1, 1, num_query, 1, 1)   # B num_cam num_q 4 4
+    pt_cam = torch.matmul(lidar2img, ref_pt).squeeze(-1)                            # B num_cam num_q 4 
     
     z = pt_cam[..., 2:3]
     eps = eps * torch.ones_like(z)
-    mask = (z > eps)                                                                #B num_c num_q
+    mask = (z > eps)                                                                # B num_c num_q
     pt_cam = pt_cam[..., 0:2] / torch.maximum(z,eps)    # eps controls minimum
-    if type(img_metas[0]['ori_shape']) == tuple:        #??? new version may bugged !!!
-        (h,w,_) = img_metas[0]['img_shape'][0]          #padded nuscene image: 928*1600
-        pt_cam[..., 0] /= w
-        pt_cam[..., 1] /= h
-    else:                                           
-        (h,w,_) = img_metas[0]['ori_shape'][0]          #waymo image
-        pt_cam[..., 0] /= w                             #cam0~2: 1280*1920
-        pt_cam[..., 1] /= h                             #cam3~4: 886 *1920 padded to 1280*1920
-        mask[:, 3:5, :] &= (pt_cam[:, 3:5, :, 1:2] < 0.7) #filter pt_cam_y > 886
+    (h,w,_) = img_metas[0]['img_shape'][0]              # unstable on version later than v1.0.0rc2!
+    pt_cam[..., 0] /= w
+    pt_cam[..., 1] /= h
 
     mask = (mask & (pt_cam[..., 0:1] > 0.0)
                  & (pt_cam[..., 0:1] < 1.0)
                  & (pt_cam[..., 1:2] > 0.0) 
                  & (pt_cam[..., 1:2] < 1.0))
-    mask = mask.view(B, num_cam, 1, num_query, 1, 1).permute(0, 2, 3, 1, 4, 5)      #B 1 num_q num_cam 1 1
+    mask = mask.view(B, num_cam, 1, num_query, 1, 1).permute(0, 2, 3, 1, 4, 5)      # B 1 num_q num_cam 1 1
     mask = torch.nan_to_num(mask)
 
-    pt_cam = (pt_cam - 0.5) * 2                         #0~1 to -1~1 to do grid_sample
+    pt_cam = (pt_cam - 0.5) * 2                         # 0~1 to -1~1 to do grid_sample
     sampled_feats = []
     for lvl, feat in enumerate(mlvl_feats):
         B, N, C, H, W = feat.size()
@@ -402,9 +396,9 @@ def feature_sampling(mlvl_feats, ref_pt, pc_range, img_metas, return_depth=False
         pt_cam_lvl = pt_cam.view(B*N, num_query, 1, 2)
         sampled_feat = F.grid_sample(feat, pt_cam_lvl)
         sampled_feat = sampled_feat.view(B, N, C, num_query, 1)
-        sampled_feat = sampled_feat.permute(0, 2, 3, 1, 4)                          #B C num_q num_cam 1
+        sampled_feat = sampled_feat.permute(0, 2, 3, 1, 4)                          # B C num_q num_cam 1
         sampled_feats.append(sampled_feat)
 
-    sampled_feats = torch.stack(sampled_feats, -1)                                  #B C num_q num_cam fpn_lvl
+    sampled_feats = torch.stack(sampled_feats, -1)                                  # B C num_q num_cam fpn_lvl
     sampled_feats = sampled_feats.view(B, C, num_query, num_cam,  1, len(mlvl_feats))
     return ref_pt_3d, sampled_feats, mask
