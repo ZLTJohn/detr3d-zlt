@@ -27,7 +27,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3D_old',
+    type='Detr3D',
     use_grid_mask=True,
     img_backbone=dict(
         type='ResNet',
@@ -114,7 +114,7 @@ model = dict(
             pc_range=point_cloud_range))))
 
 dataset_type = 'NuScenesDataset'
-data_root = 'data/nus_rc2/'
+data_root = 'data/nuscenes/'
 
 
 train_pipeline = [
@@ -164,9 +164,7 @@ data = dict(
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
         box_type_3d='LiDAR'),
     val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality),
-    test=dict(pipeline=test_pipeline, 
-              data_root=data_root,
-              ann_file=data_root + 'nuscenes_infos_val.pkl',classes=class_names, modality=input_modality))
+    test=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality))
 
 optimizer = dict(
     type='AdamW', 
@@ -190,26 +188,3 @@ checkpoint_config = dict(interval=1, max_keep_ckpts=1)
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
 # load_from='/home/chenxuanyao/checkpoint/fcos3d_detr3d.pth'
 load_from = 'ckpts/fcos3d_yue.pth'
-
-# Evaluating bboxes of pts_bbox
-# mAP: 0.3470
-# mATE: 0.7653
-# mASE: 0.2678
-# mAOE: 0.3920
-# mAVE: 0.8759
-# mAAE: 0.2108
-# NDS: 0.4223
-# Eval time: 187.8s
-
-# Per-class results:
-# Object Class    AP      ATE     ASE     AOE     AVE     AAE
-# car     0.546   0.544   0.152   0.070   0.911   0.208
-# truck   0.286   0.834   0.212   0.113   1.004   0.231
-# bus     0.346   0.871   0.196   0.116   2.061   0.382
-# trailer 0.167   1.106   0.233   0.549   0.687   0.093
-# construction_vehicle    0.082   1.061   0.449   0.962   0.120   0.384
-# pedestrian      0.424   0.700   0.295   0.512   0.462   0.194
-# motorcycle      0.341   0.710   0.259   0.488   1.291   0.176
-# bicycle 0.278   0.697   0.275   0.588   0.473   0.019
-# traffic_cone    0.529   0.526   0.313   nan     nan     nan
-# barrier 0.471   0.603   0.292   0.131   nan     nan

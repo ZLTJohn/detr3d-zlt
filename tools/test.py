@@ -101,9 +101,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-    import mmdet3d
-    if mmdet3d.__version__ == '1.0.0rc2':
-        torch.multiprocessing.set_start_method('fork')
     assert args.out or args.eval or args.format_only or args.show \
         or args.show_dir, \
         ('Please specify at least one operation (save/eval/format/show the '
@@ -259,5 +256,8 @@ def main():
 
 
 if __name__ == '__main__':
+    import mmdet3d
+    if mmdet3d.__version__ == '1.0.0rc2':
+        torch.multiprocessing.set_start_method('fork')
     main()
     print('eval exit normally')
