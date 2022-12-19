@@ -27,7 +27,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3D_old',
+    type='Detr3D',
     use_grid_mask=True,
     img_backbone=dict(
         type='ResNet',
@@ -163,10 +163,10 @@ data = dict(
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
         box_type_3d='LiDAR'),
-    val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality),
-    test=dict(pipeline=test_pipeline, 
-              data_root=data_root,
-              ann_file=data_root + 'nuscenes_infos_val.pkl',classes=class_names, modality=input_modality))
+    val=dict(pipeline=test_pipeline, data_root=data_root,
+              ann_file=data_root + 'nuscenes_infos_val.pkl', classes=class_names, modality=input_modality),
+    test=dict(pipeline=test_pipeline, data_root=data_root,
+              ann_file=data_root + 'nuscenes_infos_val.pkl', classes=class_names, modality=input_modality))
 
 optimizer = dict(
     type='AdamW', 
@@ -190,26 +190,28 @@ checkpoint_config = dict(interval=1, max_keep_ckpts=1)
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
 # load_from='/home/chenxuanyao/checkpoint/fcos3d_detr3d.pth'
 load_from = 'ckpts/fcos3d_yue.pth'
+resume_from = '/home/zhenglt/pure-detr3d/work_dirs/debug_train_on_new_pkl/epoch_15.pth'
 
 # Evaluating bboxes of pts_bbox
-# mAP: 0.3470
-# mATE: 0.7653
-# mASE: 0.2678
-# mAOE: 0.3920
-# mAVE: 0.8759
-# mAAE: 0.2108
-# NDS: 0.4223
-# Eval time: 187.8s
+# mAP: 0.3504
+# mATE: 0.7669
+# mASE: 0.2717
+# mAOE: 0.4219
+# mAVE: 0.8706
+# mAAE: 0.2102
+# NDS: 0.4211
+# Eval time: 180.8s
 
 # Per-class results:
 # Object Class    AP      ATE     ASE     AOE     AVE     AAE
-# car     0.546   0.544   0.152   0.070   0.911   0.208
-# truck   0.286   0.834   0.212   0.113   1.004   0.231
-# bus     0.346   0.871   0.196   0.116   2.061   0.382
-# trailer 0.167   1.106   0.233   0.549   0.687   0.093
-# construction_vehicle    0.082   1.061   0.449   0.962   0.120   0.384
-# pedestrian      0.424   0.700   0.295   0.512   0.462   0.194
-# motorcycle      0.341   0.710   0.259   0.488   1.291   0.176
-# bicycle 0.278   0.697   0.275   0.588   0.473   0.019
-# traffic_cone    0.529   0.526   0.313   nan     nan     nan
-# barrier 0.471   0.603   0.292   0.131   nan     nan
+# car     0.546   0.548   0.152   0.073   0.956   0.201
+# truck   0.295   0.828   0.213   0.113   1.023   0.234
+# bus     0.363   0.903   0.206   0.127   2.130   0.404
+# trailer 0.159   1.114   0.243   0.710   0.589   0.060
+# construction_vehicle    0.078   1.064   0.456   1.068   0.121   0.402
+# pedestrian      0.424   0.703   0.301   0.517   0.457   0.197
+# motorcycle      0.345   0.700   0.255   0.484   1.231   0.169
+# bicycle 0.282   0.657   0.278   0.564   0.459   0.015
+# traffic_cone    0.528   0.557   0.323   nan     nan     nan
+# barrier 0.484   0.594   0.290   0.140   nan     nan
+# 2022-12-17 07:44:18,601 - mmdet - INFO - Exp name: debug_train_on_new_pkl.py

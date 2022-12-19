@@ -245,4 +245,7 @@ def main():
 
 
 if __name__ == '__main__':
+    import mmdet3d
+    if mmdet3d.__version__ == '1.0.0rc2':
+        torch.multiprocessing.set_start_method('fork')
     main()
