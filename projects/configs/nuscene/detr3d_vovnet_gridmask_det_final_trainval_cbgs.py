@@ -199,3 +199,24 @@ runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
 load_from='ckpts/dd3d_det_final.pth'
 
 find_unused_parameters=True
+
+# mAP: 0.8348
+# mATE: 0.3225
+# mASE: 0.1417
+# mAOE: 0.0677
+# mAVE: 0.2204
+# mAAE: 0.1822
+# NDS: 0.8239
+# Eval time: 140.0s
+# Per-class results:
+# Object Class    AP      ATE     ASE     AOE     AVE     AAE
+# car     0.873   0.256   0.114   0.033   0.260   0.195
+# truck   0.833   0.327   0.115   0.033   0.191   0.216
+# bus     0.843   0.323   0.104   0.027   0.293   0.245
+# trailer 0.779   0.394   0.116   0.041   0.136   0.123
+# construction_vehicle    0.784   0.405   0.173   0.079   0.137   0.320
+# pedestrian      0.805   0.380   0.203   0.181   0.244   0.136
+# motorcycle      0.821   0.337   0.150   0.085   0.347   0.214
+# bicycle 0.871   0.271   0.169   0.079   0.154   0.009
+# traffic_cone    0.877   0.241   0.162   nan     nan     nan
+# barrier 0.862   0.289   0.110   0.050   nan     nan   
